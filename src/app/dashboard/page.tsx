@@ -7,6 +7,19 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  BarChart3, 
+  FileText, 
+  Globe, 
+  LayoutDashboard, 
+  Link2, 
+  Plus, 
+  Search, 
+  Settings, 
+  Zap
+} from 'lucide-react';
 
 // Create a Supabase client
 const supabase = createClient(
@@ -19,6 +32,7 @@ interface Project {
   website_name: string;
   website_url: string;
   created_at: string;
+  keywords: string[];
 }
 
 export default function DashboardPage() {
@@ -110,7 +124,6 @@ export default function DashboardPage() {
     }
   };
 
-  // New animation variants for the recommendations
   const listItemVariants = {
     hidden: { opacity: 0, x: -20 },
     visible: (i: number) => ({
@@ -163,6 +176,11 @@ export default function DashboardPage() {
               SEOMax
             </Link>
             <div className="flex items-center space-x-4">
+              {user && (
+                <div className="text-sm text-muted-foreground">
+                  {user.email}
+                </div>
+              )}
               <Button variant="ghost" onClick={handleSignOut}>
                 Sign out
               </Button>
@@ -170,227 +188,380 @@ export default function DashboardPage() {
           </div>
         </motion.header>
 
-        <main className="flex-1 container py-10">
+        <div className="flex flex-1">
           <motion.div 
-            className="flex justify-between items-center mb-8"
-            initial="hidden"
-            animate="visible"
-            variants={fadeIn}
+            className="hidden md:block w-64 border-r p-4 space-y-6"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
           >
-            <h1 className="text-3xl font-bold">Dashboard</h1>
-            <div className="flex gap-3">
-              <Button variant="outline" asChild>
-                <Link href="/dashboard/about-enhanced">Try Enhanced Dashboard</Link>
+            <div className="space-y-1">
+              <Button variant="ghost" className="w-full justify-start" asChild>
+                <Link href="/dashboard">
+                  <LayoutDashboard className="mr-2 h-4 w-4" />
+                  Dashboard
+                </Link>
               </Button>
-              <Button asChild>
-                <Link href="/dashboard/new-project">Add Website</Link>
+              <Button variant="ghost" className="w-full justify-start text-muted-foreground" disabled>
+                <Search className="mr-2 h-4 w-4" />
+                Keyword Research
+              </Button>
+              <Button variant="ghost" className="w-full justify-start text-muted-foreground" disabled>
+                <FileText className="mr-2 h-4 w-4" />
+                Content Analysis
+              </Button>
+              <Button variant="ghost" className="w-full justify-start text-muted-foreground" disabled>
+                <Link2 className="mr-2 h-4 w-4" />
+                Backlinks
+              </Button>
+              <Button variant="ghost" className="w-full justify-start text-muted-foreground" disabled>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
               </Button>
             </div>
+            
+            <div className="pt-4 border-t">
+              <h3 className="text-sm font-medium mb-2">Your Websites</h3>
+              <div className="space-y-1">
+                {projects.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-2">No websites yet</p>
+                ) : (
+                  projects.map((project) => (
+                    <Button 
+                      key={project.id} 
+                      variant="ghost" 
+                      className="w-full justify-start text-xs" 
+                      asChild
+                    >
+                      <Link href={`/dashboard/projects/${project.id}`}>
+                        <Globe className="mr-2 h-3 w-3" />
+                        <span className="truncate">{project.website_name}</span>
+                      </Link>
+                    </Button>
+                  ))
+                )}
+                <Button variant="ghost" className="w-full justify-start text-xs mt-2" asChild>
+                  <Link href="/dashboard/new-project">
+                    <Plus className="mr-2 h-3 w-3" />
+                    Add Website
+                  </Link>
+                </Button>
+              </div>
+            </div>
           </motion.div>
-          
-          {projects.length === 0 ? (
+
+          <main className="flex-1 container py-10">
             <motion.div 
-              className="text-center py-12 border rounded-lg bg-background"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
+              className="flex justify-between items-center mb-8"
+              initial="hidden"
+              animate="visible"
+              variants={fadeIn}
             >
-              <h2 className="text-2xl font-medium mb-2">No websites added yet</h2>
-              <p className="text-muted-foreground mb-6">
-                Add your first website to start tracking SEO metrics
-              </p>
-              <Button asChild>
-                <Link href="/dashboard/new-project">Add Website</Link>
-              </Button>
+              <h1 className="text-3xl font-bold">Dashboard</h1>
+              <div className="flex gap-3">
+                <Button asChild>
+                  <Link href="/dashboard/new-project">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Website
+                  </Link>
+                </Button>
+              </div>
             </motion.div>
-          ) : (
-            <>
+            
+            {projects.length === 0 ? (
               <motion.div 
-                className="grid gap-6 md:grid-cols-3 mb-10"
-                variants={staggerContainer}
-                initial="hidden"
-                animate="visible"
+                className="text-center py-12 border rounded-lg bg-background"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
               >
-                <motion.div 
-                  className="border rounded-lg p-6 bg-background hover:shadow-md transition-shadow"
-                  variants={fadeIn}
-                  whileHover={{ y: -5, transition: { duration: 0.2 } }}
-                >
-                  <div className="text-sm text-muted-foreground mb-2">Average SEO Score</div>
-                  <div className="text-3xl font-bold mb-1">{seoScore}/100</div>
-                  <div className="text-sm">
-                    {seoScore > 60 ? (
-                      <span className="text-green-500">Good</span>
-                    ) : seoScore > 40 ? (
-                      <span className="text-amber-500">Needs Improvement</span>
-                    ) : (
-                      <span className="text-red-500">Poor</span>
-                    )}
-                  </div>
-                </motion.div>
-                
-                <motion.div 
-                  className="border rounded-lg p-6 bg-background hover:shadow-md transition-shadow"
-                  variants={fadeIn}
-                  whileHover={{ y: -5, transition: { duration: 0.2 } }}
-                >
-                  <div className="text-sm text-muted-foreground mb-2">Organic Traffic</div>
-                  <div className="text-3xl font-bold mb-1">{trafficData.organic}</div>
-                  <div className="text-sm text-green-500">+12% from last month</div>
-                </motion.div>
-                
-                <motion.div 
-                  className="border rounded-lg p-6 bg-background hover:shadow-md transition-shadow"
-                  variants={fadeIn}
-                  whileHover={{ y: -5, transition: { duration: 0.2 } }}
-                >
-                  <div className="text-sm text-muted-foreground mb-2">Indexed Pages</div>
-                  <div className="text-3xl font-bold mb-1">34</div>
-                  <div className="text-sm text-amber-500">2 with issues</div>
-                </motion.div>
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-4">
+                  <Globe className="h-6 w-6" />
+                </div>
+                <h2 className="text-2xl font-medium mb-2">No websites added yet</h2>
+                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                  Add your first website to start tracking SEO metrics and get AI-powered recommendations
+                </p>
+                <Button asChild>
+                  <Link href="/dashboard/new-project">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Website
+                  </Link>
+                </Button>
               </motion.div>
-              
-              <div className="grid gap-6 md:grid-cols-2 mb-6">
+            ) : (
+              <>
                 <motion.div 
-                  className="border rounded-lg p-6 bg-background"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5, delay: 0.3 }}
+                  className="grid gap-6 md:grid-cols-3 mb-10"
+                  variants={staggerContainer}
+                  initial="hidden"
+                  animate="visible"
                 >
-                  <h2 className="text-xl font-semibold mb-4">Your Websites</h2>
-                  <div className="space-y-4">
-                    {projects.map((project, index) => (
-                      <motion.div 
-                        key={project.id} 
-                        className="border p-4 rounded-md hover:border-primary/50 hover:shadow-sm transition-all"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, delay: 0.1 * index }}
-                        whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-                      >
-                        <div className="font-medium mb-1">{project.website_name}</div>
-                        <div className="text-sm text-muted-foreground mb-2">{project.website_url}</div>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/dashboard/projects/${project.id}`}>View Details</Link>
-                        </Button>
-                      </motion.div>
-                    ))}
-                  </div>
-                </motion.div>
-                
-                <motion.div 
-                  className="border rounded-lg p-6 bg-background"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5, delay: 0.3 }}
-                >
-                  <h2 className="text-xl font-semibold mb-4">Keyword Rankings</h2>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b text-sm">
-                          <th className="text-left py-2">Keyword</th>
-                          <th className="text-right py-2">Position</th>
-                          <th className="text-right py-2">Change</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {keywordRankings.map((ranking, index) => (
-                          <tr key={index} className="border-b last:border-0">
-                            <td className="py-2">{ranking.keyword}</td>
-                            <td className="text-right py-2">{ranking.position}</td>
-                            <td className="text-right py-2">
-                              {ranking.change > 0 ? (
-                                <span className="text-green-500">+{ranking.change}</span>
-                              ) : ranking.change < 0 ? (
-                                <span className="text-red-500">{ranking.change}</span>
-                              ) : (
-                                <span className="text-gray-500">0</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </motion.div>
-              </div>
-              
-              <div className="grid gap-6 md:grid-cols-2 mb-6">
-                <motion.div 
-                  className="border rounded-lg p-6 bg-background"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: pageLoaded ? 1 : 0, y: pageLoaded ? 0 : 20 }}
-                  transition={{ duration: 0.5, delay: 0.4 }}
-                >
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold">SEO Modules</h2>
-                  </div>
+                  <motion.div 
+                    className="border rounded-lg p-6 bg-background hover:shadow-md transition-shadow"
+                    variants={fadeIn}
+                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                  >
+                    <div className="text-sm text-muted-foreground mb-2">Average SEO Score</div>
+                    <div className="text-3xl font-bold mb-1">{seoScore}/100</div>
+                    <div className="flex items-center space-x-1 mb-3">
+                      {seoScore > 60 ? (
+                        <span className="text-green-500 text-sm">Good</span>
+                      ) : seoScore > 40 ? (
+                        <span className="text-amber-500 text-sm">Needs Improvement</span>
+                      ) : (
+                        <span className="text-red-500 text-sm">Poor</span>
+                      )}
+                      <span className="text-xs text-muted-foreground">(across all websites)</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full ${
+                          seoScore > 70 ? 'bg-green-500' : 
+                          seoScore > 50 ? 'bg-blue-500' : 
+                          seoScore > 30 ? 'bg-amber-500' : 
+                          'bg-red-500'
+                        }`}
+                        style={{ width: `${seoScore}%` }}
+                      />
+                    </div>
+                  </motion.div>
                   
-                  <div className="grid grid-cols-1 gap-4">
-                    <motion.div 
-                      className="border p-4 rounded-md hover:border-primary/50 hover:shadow-sm transition-all"
-                      whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-                    >
-                      <div className="font-medium mb-2">Content Optimization</div>
-                      <div className="text-sm text-muted-foreground mb-3">
-                        Create, analyze, and optimize content with AI-powered suggestions
-                      </div>
-                      <Button variant="default" size="sm" asChild>
-                        <Link href="/dashboard/content">Open Content Module</Link>
-                      </Button>
-                    </motion.div>
+                  <motion.div 
+                    className="border rounded-lg p-6 bg-background hover:shadow-md transition-shadow"
+                    variants={fadeIn}
+                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                  >
+                    <div className="text-sm text-muted-foreground mb-2">Organic Traffic</div>
+                    <div className="text-3xl font-bold mb-1">{trafficData.organic}</div>
+                    <div className="flex items-center space-x-2 mb-3">
+                      <span className="text-green-500 text-sm">+12%</span>
+                      <span className="text-xs text-muted-foreground">from last month</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                      <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                      <span>Organic</span>
+                      <span className="w-3 h-3 bg-blue-500 rounded-full ml-2"></span>
+                      <span>Direct: {trafficData.direct}</span>
+                      <span className="w-3 h-3 bg-purple-500 rounded-full ml-2"></span>
+                      <span>Referral: {trafficData.referral}</span>
+                    </div>
+                  </motion.div>
+                  
+                  <motion.div 
+                    className="border rounded-lg p-6 bg-background hover:shadow-md transition-shadow"
+                    variants={fadeIn}
+                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                  >
+                    <div className="text-sm text-muted-foreground mb-2">Total Websites</div>
+                    <div className="text-3xl font-bold mb-1">{projects.length}</div>
+                    <div className="flex items-center mb-3">
+                      <span className="text-xs text-muted-foreground">
+                        {projects.reduce((total, project) => total + (project.keywords?.length || 0), 0)} keywords tracked
+                      </span>
+                    </div>
+                    <Button variant="outline" className="w-full text-sm" size="sm" asChild>
+                      <Link href="/dashboard/new-project">
+                        <Plus className="mr-1 h-3 w-3" />
+                        Add Another Website
+                      </Link>
+                    </Button>
+                  </motion.div>
+                </motion.div>
+
+                <motion.div variants={fadeIn} initial="hidden" animate="visible">
+                  <Tabs defaultValue="websites" className="mb-8">
+                    <TabsList>
+                      <TabsTrigger value="websites">Your Websites</TabsTrigger>
+                      <TabsTrigger value="keywords">Top Keywords</TabsTrigger>
+                      <TabsTrigger value="actions">Recommended Actions</TabsTrigger>
+                    </TabsList>
                     
-                    <motion.div 
-                      className="border p-4 rounded-md hover:border-primary/50 hover:shadow-sm transition-all"
-                      whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-                    >
-                      <div className="font-medium mb-2">Technical SEO (Coming Soon)</div>
-                      <div className="text-sm text-muted-foreground mb-3">
-                        Identify and fix technical issues affecting your site's performance
+                    <TabsContent value="websites" className="mt-6">
+                      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                        {projects.map((project, index) => (
+                          <motion.div
+                            key={project.id}
+                            variants={listItemVariants}
+                            custom={index}
+                            initial="hidden"
+                            animate="visible"
+                          >
+                            <Card className="overflow-hidden hover:shadow-md transition-shadow">
+                              <CardHeader className="p-6 pb-4">
+                                <CardTitle className="flex justify-between items-center">
+                                  <span className="truncate">{project.website_name}</span>
+                                  <span className="text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
+                                    {getRandomScore()}/100
+                                  </span>
+                                </CardTitle>
+                                <CardDescription className="truncate">
+                                  {project.website_url}
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent className="p-6 pt-0">
+                                <div className="flex items-center text-sm text-muted-foreground mb-4">
+                                  <div className="flex items-center">
+                                    <span className="w-2.5 h-2.5 bg-primary rounded-full mr-1.5"></span>
+                                    <span>{project.keywords?.length || 0} keywords</span>
+                                  </div>
+                                  <div className="flex items-center ml-4">
+                                    <span className="w-2.5 h-2.5 bg-green-500 rounded-full mr-1.5"></span>
+                                    <span>{getRandomNumber(3, 12)} in top 10</span>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <Button variant="outline" size="sm" asChild>
+                                    <Link href={`/dashboard/projects/${project.id}`}>
+                                      <BarChart3 className="mr-2 h-3.5 w-3.5" />
+                                      Dashboard
+                                    </Link>
+                                  </Button>
+                                  <Button size="sm" asChild>
+                                    <Link href={`/dashboard/projects/${project.id}/keywords`}>
+                                      <Search className="mr-2 h-3.5 w-3.5" />
+                                      Keywords
+                                    </Link>
+                                  </Button>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        ))}
+                        
+                        <motion.div
+                          variants={listItemVariants}
+                          custom={projects.length}
+                          initial="hidden"
+                          animate="visible"
+                        >
+                          <Card className="border-dashed h-full flex items-center justify-center">
+                            <Button variant="ghost" asChild>
+                              <Link href="/dashboard/new-project" className="flex flex-col items-center py-12">
+                                <Plus className="h-8 w-8 mb-3 text-muted-foreground" />
+                                <span>Add Website</span>
+                              </Link>
+                            </Button>
+                          </Card>
+                        </motion.div>
                       </div>
-                      <Button variant="outline" size="sm" disabled>
-                        Coming Soon
-                      </Button>
-                    </motion.div>
-                  </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="keywords" className="mt-6">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Top Keywords Performance</CardTitle>
+                          <CardDescription>
+                            Current rankings for your most important keywords
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="overflow-x-auto">
+                            <table className="w-full">
+                              <thead>
+                                <tr className="border-b">
+                                  <th className="text-left font-medium py-2">Keyword</th>
+                                  <th className="text-center font-medium py-2">Position</th>
+                                  <th className="text-center font-medium py-2">Change</th>
+                                  <th className="text-right font-medium py-2">Search Volume</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {keywordRankings.map((kw, idx) => (
+                                  <tr key={idx} className="border-b last:border-0 hover:bg-muted/50">
+                                    <td className="py-3">{kw.keyword}</td>
+                                    <td className="py-3 text-center">
+                                      <span className="inline-block px-2 py-1 rounded-full text-xs bg-primary/10 text-primary">
+                                        {kw.position}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 text-center">
+                                      {kw.change > 0 ? (
+                                        <span className="text-green-500">↑{kw.change}</span>
+                                      ) : kw.change < 0 ? (
+                                        <span className="text-red-500">↓{Math.abs(kw.change)}</span>
+                                      ) : (
+                                        <span className="text-gray-500">-</span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 text-right">{getRandomNumber(500, 5000)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+                    
+                    <TabsContent value="actions" className="mt-6">
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-base">Keyword Research</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-muted-foreground mb-4">
+                              Discover new keyword opportunities with our AI research tool
+                            </p>
+                            {projects.length > 0 && (
+                              <Button asChild>
+                                <Link href={`/dashboard/projects/${projects[0].id}/keywords`}>
+                                  <Search className="mr-2 h-4 w-4" />
+                                  Research Keywords
+                                </Link>
+                              </Button>
+                            )}
+                          </CardContent>
+                        </Card>
+                        
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-base">Content Optimization</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-muted-foreground mb-4">
+                              Analyze and improve your content for better rankings
+                            </p>
+                            <Button variant="outline" disabled>
+                              <FileText className="mr-2 h-4 w-4" />
+                              Coming Soon
+                            </Button>
+                          </CardContent>
+                        </Card>
+                        
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-base">Technical SEO</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-muted-foreground mb-4">
+                              Fix technical issues that are affecting your rankings
+                            </p>
+                            <Button variant="outline" disabled>
+                              <Zap className="mr-2 h-4 w-4" />
+                              Coming Soon
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </motion.div>
-              
-                <motion.div 
-                  className="border rounded-lg p-6 bg-background"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: pageLoaded ? 1 : 0, y: pageLoaded ? 0 : 20 }}
-                  transition={{ duration: 0.5, delay: 0.6 }}
-                >
-                  <h2 className="text-xl font-semibold mb-4">SEO Recommendations</h2>
-                  <ul className="space-y-3">
-                    {[
-                      { icon: "⚠️", color: "text-amber-500", text: "Improve page load speed on your homepage (currently 3.2s)" },
-                      { icon: "✓", color: "text-green-500", text: "All pages have proper meta descriptions" },
-                      { icon: "❌", color: "text-red-500", text: "Fix 4 broken links on your services page" },
-                      { icon: "⚠️", color: "text-amber-500", text: "Add alt text to 12 images" },
-                      { icon: "✓", color: "text-green-500", text: "Mobile-friendly design implemented" }
-                    ].map((item, i) => (
-                      <motion.li 
-                        key={i}
-                        className="flex items-start gap-2 border-b pb-2 last:border-0"
-                        custom={i}
-                        initial="hidden"
-                        animate={pageLoaded ? "visible" : "hidden"}
-                        variants={listItemVariants}
-                        whileHover={{ x: 5, transition: { duration: 0.2 } }}
-                      >
-                        <span className={`${item.color} text-lg`}>{item.icon}</span>
-                        <span>{item.text}</span>
-                      </motion.li>
-                    ))}
-                  </ul>
-                </motion.div>
-              </div>
-            </>
-          )}
-        </main>
+              </>
+            )}
+          </main>
+        </div>
       </div>
     </AnimatePresence>
   );
+}
+
+// Helper functions for random demo data
+function getRandomScore() {
+  return Math.floor(Math.random() * 30) + 60;
+}
+
+function getRandomNumber(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 } 

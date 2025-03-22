@@ -1,8 +1,9 @@
-import { ChatOpenAI } from '@langchain/openai';
-import { PromptTemplate } from '@langchain/core/prompts';
-import { StringOutputParser } from '@langchain/core/output_parsers';
-import { RunnableSequence } from '@langchain/core/runnables';
-import { RecursiveCharacterTextSplitter } from '@langchain/text-splitters';
+import { ChatOpenAI } from 'langchain/chat_models/openai';
+import { PromptTemplate } from 'langchain/prompts';
+import { StringOutputParser } from 'langchain/schema/output_parser';
+import { RunnableSequence } from 'langchain/schema/runnable';
+import { StructuredOutputParser } from "langchain/output_parsers";
+import { z } from "zod";
 
 // Initialize the model - you can replace with Groq or other provider if needed
 const model = new ChatOpenAI({
@@ -13,11 +14,28 @@ const model = new ChatOpenAI({
 
 const outputParser = new StringOutputParser();
 
-// Text Splitter for handling longer content
-const textSplitter = new RecursiveCharacterTextSplitter({
-  chunkSize: 4000,
-  chunkOverlap: 200,
-});
+// Custom text splitter function instead of using @langchain/text-splitters
+function splitTextIntoChunks(text: string, chunkSize = 4000, overlap = 200): string[] {
+  const chunks: string[] = [];
+  
+  if (text.length <= chunkSize) {
+    return [text];
+  }
+  
+  let startIndex = 0;
+  while (startIndex < text.length) {
+    const endIndex = Math.min(startIndex + chunkSize, text.length);
+    chunks.push(text.slice(startIndex, endIndex));
+    startIndex = endIndex - overlap;
+    
+    // Break if we're at the end of the text
+    if (endIndex === text.length) {
+      break;
+    }
+  }
+  
+  return chunks;
+}
 
 // Content readability analysis
 const readabilityPrompt = PromptTemplate.fromTemplate(`
@@ -327,26 +345,186 @@ export interface ContentBrief {
   seo_recommendations: string[];
 }
 
+// Define interfaces for the analysis results
+export interface ReadabilityAnalysis {
+  readingLevel: { value: string; score: number };
+  sentenceStructure: { score: number; analysis: string };
+  contentStructure: { score: number; analysis: string };
+  suggestions: string[];
+}
+
+export interface KeywordAnalysis {
+  density: { value: number; score: number };
+  placement: { score: number; analysis: string };
+  relatedTerms: { score: number; terms: string[] };
+  suggestedTerms: string[];
+}
+
+export interface ContentSuggestion {
+  title: string;
+  description: string;
+  priority: 'high' | 'medium' | 'low';
+}
+
+export interface ContentAnalysisResult {
+  readabilityAnalysis: ReadabilityAnalysis;
+  keywordAnalysis: KeywordAnalysis;
+  contentSuggestions: ContentSuggestion[];
+  overallScore: number;
+}
+
+export interface OptimizedContentResult {
+  optimizedContent: string;
+  changesExplanation: string;
+}
+
 // Main ContentAnalyzer class
 export class ContentAnalyzer {
+  private model: ChatOpenAI;
+  private readabilityPrompt: PromptTemplate;
+  private keywordPrompt: PromptTemplate;
+  private contentAnalysisPrompt: PromptTemplate;
+  private optimizeContentPrompt: PromptTemplate;
+
+  constructor() {
+    // Initialize LLM
+    this.model = new ChatOpenAI({
+      modelName: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
+      temperature: 0.2,
+      openAIApiKey: process.env.OPENAI_API_KEY,
+    });
+
+    // Initialize prompt templates
+    this.readabilityPrompt = PromptTemplate.fromTemplate(`
+      You are an expert content editor focused on readability.
+      Analyze the following content and provide detailed feedback on its readability.
+      
+      Content:
+      {content}
+      
+      Provide a structured analysis including:
+      1. The approximate reading level (e.g., "Grade 8-9", "College level")
+      2. Sentence structure assessment (variety, length, complexity)
+      3. Content organization and flow
+      4. Specific suggestions for improvement
+      
+      Format your response as JSON according to the ReadabilityAnalysis interface.
+    `);
+
+    this.keywordPrompt = PromptTemplate.fromTemplate(`
+      You are an SEO expert analyzing content for keyword optimization.
+      
+      Content: {content}
+      Target Keyword: {keyword}
+      
+      Provide a structured analysis of how well the content is optimized for the target keyword:
+      1. Keyword density (percentage and assessment)
+      2. Keyword placement (title, headers, intro, conclusion)
+      3. Related terms usage
+      4. Suggested additional semantically related terms to include
+      
+      Format your response as JSON according to the KeywordAnalysis interface.
+    `);
+
+    this.contentAnalysisPrompt = PromptTemplate.fromTemplate(`
+      You are an expert SEO content analyst. Analyze the following content for SEO effectiveness and readability.
+      
+      Content: {content}
+      Target Keyword: {keyword}
+      
+      Provide a comprehensive analysis including:
+      
+      1. Readability:
+         - Reading level (e.g., "Grade 8-9", "College level") with a score out of 10
+         - Sentence structure assessment (variety, length, complexity) with a score out of 10
+         - Content structure and organization with a score out of 10
+         - Specific suggestions for improving readability (list 2-4 suggestions)
+      
+      2. Keyword Analysis:
+         - Keyword density (percentage) with a score out of 10
+         - Keyword placement assessment with a score out of 10
+         - Related terms usage with a score out of 10
+         - List of 5-8 suggested semantically related terms to include
+      
+      3. Content Suggestions:
+         - 3-5 specific suggestions to improve the content, each with a title, description, and priority (high/medium/low)
+      
+      4. Overall Score:
+         - A score out of 100 evaluating the overall SEO quality of the content
+      
+      Format your response as a JSON object with this structure:
+      {
+        "readabilityAnalysis": {
+          "readingLevel": { "value": string, "score": number },
+          "sentenceStructure": { "score": number, "analysis": string },
+          "contentStructure": { "score": number, "analysis": string },
+          "suggestions": string[]
+        },
+        "keywordAnalysis": {
+          "density": { "value": number, "score": number },
+          "placement": { "score": number, "analysis": string },
+          "relatedTerms": { "score": number, "terms": string[] },
+          "suggestedTerms": string[]
+        },
+        "contentSuggestions": [
+          { "title": string, "description": string, "priority": "high"|"medium"|"low" }
+        ],
+        "overallScore": number
+      }
+    `);
+
+    this.optimizeContentPrompt = PromptTemplate.fromTemplate(`
+      You are an expert SEO content optimizer. Rewrite the following content to improve its SEO effectiveness
+      while maintaining its original message and voice.
+      
+      Content: {content}
+      Target Keyword: {keyword}
+      Optimization Level: {level} (light, medium, or high)
+      
+      Guidelines:
+      - Improve keyword placement and density without keyword stuffing
+      - Enhance readability and flow
+      - Add semantically related terms
+      - Improve headings, intro, and conclusion
+      - Adjust based on the optimization level (light = subtle changes, high = more aggressive optimization)
+      
+      Provide:
+      1. The fully optimized content (keep the same overall length)
+      2. A brief explanation of the changes made
+      
+      Format as JSON:
+      {
+        "optimizedContent": "The full optimized content here",
+        "changesExplanation": "Brief explanation of changes made"
+      }
+    `);
+  }
+
   // Split long content into manageable chunks
   private async splitContent(content: string): Promise<string[]> {
-    return await textSplitter.splitText(content);
+    return splitTextIntoChunks(content);
   }
 
   // Analyze content readability
   async analyzeReadability(content: string): Promise<ReadabilityAnalysis> {
     try {
-      // For long content, analyze first chunk for readability
-      const contentChunks = await this.splitContent(content);
-      const result = await readabilityChain.invoke({
-        content: contentChunks[0], // Analyze first chunk
+      const formattedPrompt = await this.readabilityPrompt.format({
+        content,
       });
+
+      const response = await this.model.invoke(formattedPrompt);
+      const responseText = response.content.toString();
       
-      return JSON.parse(result) as ReadabilityAnalysis;
+      // Extract JSON from response
+      const jsonMatch = responseText.match(/```json\n([\s\S]*)\n```/) || 
+                         responseText.match(/{[\s\S]*}/);
+      
+      const jsonContent = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseText;
+      
+      return JSON.parse(jsonContent);
     } catch (error) {
-      console.error('Error analyzing readability:', error);
-      throw new Error('Failed to analyze content readability');
+      console.error("Error analyzing readability:", error);
+      throw new Error("Failed to analyze content readability");
     }
   }
 
@@ -479,5 +657,62 @@ export class ContentAnalyzer {
       structure,
       suggestions,
     };
+  }
+
+  /**
+   * Analyze content for a specific keyword and provide comprehensive analysis
+   */
+  async analyzeContentForKeyword(content: string, keyword: string): Promise<ContentAnalysisResult> {
+    try {
+      const formattedPrompt = await this.contentAnalysisPrompt.format({
+        content,
+        keyword,
+      });
+
+      const response = await this.model.invoke(formattedPrompt);
+      const responseText = response.content.toString();
+      
+      // Extract JSON from response
+      const jsonMatch = responseText.match(/```json\n([\s\S]*)\n```/) || 
+                         responseText.match(/{[\s\S]*}/);
+      
+      const jsonContent = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseText;
+      
+      return JSON.parse(jsonContent);
+    } catch (error) {
+      console.error("Error analyzing content:", error);
+      throw new Error("Failed to analyze content");
+    }
+  }
+
+  /**
+   * Optimize content for a given keyword with the specified optimization level
+   */
+  async optimizeContent(
+    content: string, 
+    keyword: string, 
+    level: 'light' | 'medium' | 'high' = 'medium'
+  ): Promise<OptimizedContentResult> {
+    try {
+      const formattedPrompt = await this.optimizeContentPrompt.format({
+        content,
+        keyword,
+        level
+      });
+
+      const response = await this.model.invoke(formattedPrompt);
+      const responseText = response.content.toString();
+      
+      // Extract JSON from response
+      const jsonMatch = responseText.match(/```json\n([\s\S]*)\n```/) || 
+                         responseText.match(/{[\s\S]*}/);
+      
+      const jsonContent = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseText;
+      
+      return JSON.parse(jsonContent);
+    } catch (error) {
+      console.error("Error optimizing content:", error);
+      throw new Error("Failed to optimize content");
+    }
   }
 } 

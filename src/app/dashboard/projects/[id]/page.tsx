@@ -1,12 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
-import { createClient } from '@supabase/supabase-js';
-import { FileText, Wrench, ExternalLink, CalendarDays } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { createClient } from "@supabase/supabase-js";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  ArrowRight, 
+  BarChart3, 
+  ExternalLink, 
+  FileText, 
+  Link2, 
+  Search, 
+  Share2, 
+  Zap,
+  Lightbulb,
+  Globe
+} from "lucide-react";
 
 // Create a Supabase client
 const supabase = createClient(
@@ -20,7 +34,6 @@ interface Project {
   website_url: string;
   keywords: string[];
   competitors: string[];
-  seo_score: number;
   created_at: string;
 }
 
@@ -41,27 +54,46 @@ interface SeoRecommendation {
   status: 'open' | 'in_progress' | 'resolved';
 }
 
-export default function ProjectDetailsPage({ params }: { params: { id: string } }) {
-  const { user, loading: authLoading } = useAuth();
+export default function ProjectPage() {
+  const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [keywordRankings, setKeywordRankings] = useState<KeywordRanking[]>([]);
   const [recommendations, setRecommendations] = useState<SeoRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [pageLoaded, setPageLoaded] = useState(false);
 
-  // Redirect if not authenticated
+  // Demo metrics
+  const [seoScore, setSeoScore] = useState(67);
+  const [trafficData, setTrafficData] = useState({
+    organic: 892,
+    direct: 356,
+    referral: 213,
+    social: 157,
+    paid: 78
+  });
+
+  const projectId = params?.id as string;
+
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    } else if (user) {
+    if (projectId && user) {
       fetchProjectData();
     }
-  }, [user, authLoading, router, params.id]);
+  }, [projectId, user]);
+
+  // Set page as loaded after initial data fetch
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => {
+        setPageLoaded(true);
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   const fetchProjectData = async () => {
-    if (!user) return;
-    
     try {
       setLoading(true);
       
@@ -69,394 +101,559 @@ export default function ProjectDetailsPage({ params }: { params: { id: string } 
       const { data: projectData, error: projectError } = await supabase
         .from('projects')
         .select('*')
-        .eq('id', params.id)
-        .eq('user_id', user.id)
+        .eq('id', projectId)
         .single();
       
       if (projectError) {
-        setError('Project not found or you do not have access to it');
-        setLoading(false);
+        console.error('Error fetching project:', projectError);
         return;
       }
       
-      setProject(projectData);
-      
       // Fetch keyword rankings
-      const { data: keywordData, error: keywordError } = await supabase
+      const { data: keywordsData, error: keywordsError } = await supabase
         .from('keyword_rankings')
         .select('*')
-        .eq('project_id', params.id);
-      
-      if (!keywordError) {
-        setKeywordRankings(keywordData || []);
+        .eq('project_id', projectId)
+        .order('position', { ascending: true });
+        
+      if (keywordsError) {
+        console.error('Error fetching keywords:', keywordsError);
       }
       
       // Fetch SEO recommendations
       const { data: recommendationsData, error: recommendationsError } = await supabase
         .from('seo_recommendations')
         .select('*')
-        .eq('project_id', params.id);
+        .eq('project_id', projectId)
+        .order('priority', { ascending: false });
+        
+      if (recommendationsError) {
+        console.error('Error fetching recommendations:', recommendationsError);
+      }
       
-      if (!recommendationsError) {
-        setRecommendations(recommendationsData || []);
+      // Update state with fetched data
+      setProject(projectData);
+      setKeywordRankings(keywordsData || []);
+      setRecommendations(recommendationsData || []);
+      
+      // Calculate SEO score based on recommendations and rankings
+      if (recommendationsData) {
+        calculateSeoScore(recommendationsData, keywordsData || []);
       }
       
     } catch (err) {
-      setError('Failed to load project data');
-      console.error(err);
+      console.error('Error fetching project data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Create sample data if there are no keywords or recommendations yet
-  useEffect(() => {
-    if (project && keywordRankings.length === 0 && !loading) {
-      // Sample keywords - in a real app, these would come from a keyword tracking service
-      const sampleKeywords = [
-        { keyword: 'website seo', position: 12, change: 3 },
-        { keyword: 'seo tools', position: 8, change: -1 },
-        { keyword: 'best seo service', position: 15, change: 5 },
-        { keyword: 'local business seo', position: 6, change: 2 },
-      ];
-      
-      setKeywordRankings(sampleKeywords.map((item, index) => ({
-        id: `sample-${index}`,
-        keyword: item.keyword,
-        position: item.position,
-        previous_position: item.position - item.change,
-        change: item.change,
-        date_checked: new Date().toISOString(),
-      })));
-    }
+  const calculateSeoScore = (recommendations: SeoRecommendation[], keywords: KeywordRanking[]) => {
+    // Base score
+    let score = 70;
     
-    if (project && recommendations.length === 0 && !loading) {
-      // Sample recommendations - in a real app, these would come from an SEO analysis
-      const sampleRecommendations = [
-        { 
-          issue_type: 'Performance',
-          description: 'Improve page load speed on homepage (currently 3.2s)',
-          priority: 'high' as const,
-          status: 'open' as const 
-        },
-        { 
-          issue_type: 'Content',
-          description: 'Add meta descriptions to 5 pages',
-          priority: 'medium' as const,
-          status: 'in_progress' as const 
-        },
-        { 
-          issue_type: 'Technical',
-          description: 'Fix 4 broken links on your services page',
-          priority: 'high' as const,
-          status: 'open' as const 
-        },
-        { 
-          issue_type: 'Content',
-          description: 'Add alt text to 12 images',
-          priority: 'medium' as const,
-          status: 'open' as const 
-        },
-        { 
-          issue_type: 'Mobile',
-          description: 'Mobile-friendly design implemented',
-          priority: 'low' as const,
-          status: 'resolved' as const 
-        },
-      ];
-      
-      setRecommendations(sampleRecommendations.map((item, index) => ({
-        id: `sample-${index}`,
-        ...item
-      })));
+    // Deduct points for high priority issues
+    const highPriorityCount = recommendations.filter(r => r.priority === 'high' && r.status !== 'resolved').length;
+    score -= highPriorityCount * 5;
+    
+    // Deduct less for medium priority issues
+    const mediumPriorityCount = recommendations.filter(r => r.priority === 'medium' && r.status !== 'resolved').length;
+    score -= mediumPriorityCount * 2;
+    
+    // Give small boost for keywords ranking in top 10
+    const topRankingKeywords = keywords.filter(k => k.position > 0 && k.position <= 10).length;
+    score += topRankingKeywords * 2;
+    
+    // Ensure score stays within bounds
+    score = Math.max(0, Math.min(100, score));
+    
+    setSeoScore(score);
+  };
+
+  // Animation variants
+  const fadeIn = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { duration: 0.4 }
     }
-  }, [project, keywordRankings.length, recommendations.length, loading]);
+  };
+  
+  const staggerContainer = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
 
-  if (authLoading || loading) {
-    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
-  }
-
-  if (error) {
+  if (loading) {
     return (
-      <div className="flex min-h-screen flex-col">
-        <header className="border-b">
-          <div className="container flex h-16 items-center justify-between">
-            <Link href="/dashboard" className="font-bold text-2xl">
-              SEOMax
-            </Link>
-          </div>
-        </header>
-        <main className="flex-1 container py-10">
-          <div className="max-w-3xl mx-auto text-center py-12">
-            <h1 className="text-2xl font-bold mb-4">Error</h1>
-            <p className="text-muted-foreground mb-6">{error}</p>
-            <Button asChild>
-              <Link href="/dashboard">Return to Dashboard</Link>
-            </Button>
-          </div>
-        </main>
+      <div className="p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+          <div className="h-64 bg-gray-200 rounded"></div>
+        </div>
       </div>
     );
   }
 
-  if (!project) {
-    return null;
-  }
-
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="border-b">
-        <div className="container flex h-16 items-center justify-between">
-          <Link href="/dashboard" className="font-bold text-2xl">
-            SEOMax
-          </Link>
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={() => router.push('/dashboard')}>
-              Back to Dashboard
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1 container py-10">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold mb-1">{project.website_name}</h1>
-            <a 
-              href={project.website_url} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="text-primary hover:underline"
-            >
-              {project.website_url}
-            </a>
-          </div>
-          <div>
-            <Button variant="outline" className="mr-2">
-              Run Audit
-            </Button>
-            <Button asChild>
-              <Link href={`/dashboard/projects/${project.id}/edit`}>Edit Project</Link>
-            </Button>
-          </div>
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">{project?.website_name}</h1>
+          <p className="text-muted-foreground">
+            {project?.website_url} · Added on {new Date(project?.created_at || '').toLocaleDateString()}
+          </p>
         </div>
         
-        <div className="grid gap-6 md:grid-cols-2 mb-6">
-          <div className="border rounded-lg p-6 bg-background">
-            <h2 className="text-xl font-semibold mb-4">SEO Tools</h2>
-            <div className="grid grid-cols-1 gap-3">
-              <Button variant="outline" className="justify-start" asChild>
-                <Link href={`/dashboard/content?projectId=${project.id}`}>
-                  <FileText className="h-4 w-4 mr-2" /> Content Optimization
-                </Link>
-              </Button>
-              <Button variant="outline" className="justify-start" disabled>
-                <Wrench className="h-4 w-4 mr-2" /> Technical SEO (Coming Soon)
-              </Button>
-              <Button variant="outline" className="justify-start" disabled>
-                <ExternalLink className="h-4 w-4 mr-2" /> Backlink Analysis (Coming Soon)
-              </Button>
-            </div>
-          </div>
-          
-          <div className="border rounded-lg p-6 bg-background">
-            <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
-            <div className="space-y-3">
-              <div className="flex items-center text-sm border-b pb-2">
-                <CalendarDays className="h-4 w-4 mr-2 text-muted-foreground" />
-                <span className="text-muted-foreground mr-2">Yesterday:</span>
-                <span>Generated 3 content optimization suggestions</span>
-              </div>
-              <div className="flex items-center text-sm border-b pb-2">
-                <CalendarDays className="h-4 w-4 mr-2 text-muted-foreground" />
-                <span className="text-muted-foreground mr-2">3 days ago:</span>
-                <span>Weekly SEO ranking update</span>
-              </div>
-              <div className="flex items-center text-sm">
-                <CalendarDays className="h-4 w-4 mr-2 text-muted-foreground" />
-                <span className="text-muted-foreground mr-2">1 week ago:</span>
-                <span>Completed site audit</span>
-              </div>
-            </div>
-          </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={project?.website_url || ''} target="_blank" rel="noopener noreferrer">
+              <Globe className="mr-2 h-4 w-4" />
+              Visit Site
+            </Link>
+          </Button>
         </div>
+      </div>
+      
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">SEO Score</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{seoScore}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Based on {recommendations?.length || 0} recommendations
+            </p>
+            <div className="mt-3 h-2 w-full bg-muted rounded-full overflow-hidden">
+              <div 
+                className={`h-full ${
+                  seoScore > 70 ? 'bg-green-500' : 
+                  seoScore > 50 ? 'bg-blue-500' : 
+                  seoScore > 30 ? 'bg-amber-500' : 
+                  'bg-red-500'
+                }`}
+                style={{ width: `${seoScore}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
         
-        <div className="grid gap-6 md:grid-cols-3 mb-10">
-          <div className="border rounded-lg p-6 bg-background">
-            <div className="text-sm text-muted-foreground mb-2">SEO Score</div>
-            <div className="text-3xl font-bold mb-1">{project.seo_score || 78}/100</div>
-            <div className="text-sm">
-              {(project.seo_score || 78) > 60 ? (
-                <span className="text-green-500">Good</span>
-              ) : (project.seo_score || 78) > 40 ? (
-                <span className="text-amber-500">Needs Improvement</span>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Rankings Monitor</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex">
+              <div className="text-2xl font-bold mr-2">{keywordRankings?.length || 0}</div>
+              <div className="flex flex-col justify-center">
+                <span className="text-xs text-muted-foreground">keywords</span>
+                <span className="text-xs text-green-500">
+                  {keywordRankings?.filter(k => k.position <= 10).length || 0} in top 10
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 grid grid-cols-5 gap-1">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-2 rounded-full ${
+                    i < 3 ? 'bg-green-500' :
+                    i < 7 ? 'bg-amber-500/50' :
+                    'bg-muted'
+                  }`}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Monthly Visitors</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">648</div>
+            <p className="text-xs text-green-500 mt-1">
+              +12% from last month
+            </p>
+            <div className="mt-2 grid grid-cols-7 gap-1">
+              {[20, 40, 30, 25, 45, 35, 55].map((height, i) => (
+                <div key={i} className="bg-primary/10 rounded-sm flex items-end h-8">
+                  <div 
+                    className="bg-primary rounded-sm w-full"
+                    style={{ height: `${height}%` }}
+                  />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    
+      <Tabs defaultValue="overview">
+        <TabsList className="mb-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="keywords">
+            <Search className="mr-2 h-4 w-4" />
+            Keywords
+          </TabsTrigger>
+          <TabsTrigger value="content">
+            <FileText className="mr-2 h-4 w-4" />
+            Content
+          </TabsTrigger>
+          <TabsTrigger value="recommendations">
+            <Lightbulb className="mr-2 h-4 w-4" />
+            Recommendations
+          </TabsTrigger>
+          <TabsTrigger value="competitors">Competitors</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="overview">
+          <motion.div 
+            className="grid gap-6 md:grid-cols-2"
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+          >
+            <motion.div variants={fadeIn}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Traffic Sources</CardTitle>
+                  <CardDescription>
+                    Breakdown of traffic by source
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="space-y-4">
+                    {Object.entries(trafficData).map(([source, value]) => (
+                      <div key={source} className="flex items-center">
+                        <div className="w-36 font-medium capitalize">{source}</div>
+                        <div className="flex-1">
+                          <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                            <div 
+                              className={
+                                source === 'organic' ? 'bg-green-500' :
+                                source === 'direct' ? 'bg-blue-500' :
+                                source === 'referral' ? 'bg-purple-500' :
+                                source === 'social' ? 'bg-pink-500' :
+                                'bg-orange-500'
+                              }
+                              style={{ 
+                                width: `${(value / (trafficData.organic + trafficData.direct + trafficData.referral + trafficData.social + trafficData.paid)) * 100}%`,
+                                height: '100%'
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="w-16 text-right">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+            
+            <motion.div variants={fadeIn}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Performance Metrics</CardTitle>
+                  <CardDescription>
+                    Key website performance indicators
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="text-sm font-medium">Page Speed Score</div>
+                        <div className="text-muted-foreground text-xs">Mobile</div>
+                      </div>
+                      <div className="text-2xl font-bold">76/100</div>
+                    </div>
+                    <div className="h-[1px] bg-gray-100" />
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="text-sm font-medium">Core Web Vitals</div>
+                        <div className="text-muted-foreground text-xs">Pass rate</div>
+                      </div>
+                      <div className="text-2xl font-bold">67%</div>
+                    </div>
+                    <div className="h-[1px] bg-gray-100" />
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="text-sm font-medium">Indexed Pages</div>
+                        <div className="text-muted-foreground text-xs">Google Search Console</div>
+                      </div>
+                      <div className="text-2xl font-bold">42</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+            
+            <motion.div variants={fadeIn} className="md:col-span-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Key Actions</CardTitle>
+                  <CardDescription>
+                    Recommended next steps to improve your SEO
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Button variant="outline" className="h-auto py-4 px-4 justify-start" asChild>
+                      <Link href={`/dashboard/projects/${projectId}/keywords`}>
+                        <div className="flex flex-col items-start text-left">
+                          <div className="flex items-center mb-2">
+                            <Search className="mr-2 h-5 w-5 text-primary" />
+                            <span className="font-medium">Keyword Research</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Find new keyword opportunities and analyze your current rankings
+                          </p>
+                        </div>
+                      </Link>
+                    </Button>
+                    
+                    <Button variant="outline" className="h-auto py-4 px-4 justify-start">
+                      <div className="flex flex-col items-start text-left">
+                        <div className="flex items-center mb-2">
+                          <FileText className="mr-2 h-5 w-5 text-primary" />
+                          <span className="font-medium">Content Analysis</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Optimize your content with AI-powered recommendations
+                        </p>
+                      </div>
+                    </Button>
+                    
+                    <Button variant="outline" className="h-auto py-4 px-4 justify-start">
+                      <div className="flex flex-col items-start text-left">
+                        <div className="flex items-center mb-2">
+                          <Link2 className="mr-2 h-5 w-5 text-primary" />
+                          <span className="font-medium">Backlink Analysis</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Track your backlinks and find new opportunities
+                        </p>
+                      </div>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+        </TabsContent>
+        
+        <TabsContent value="keywords">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Keyword Rankings</CardTitle>
+                  <CardDescription>
+                    Track your performance for target keywords
+                  </CardDescription>
+                </div>
+                <Button asChild>
+                  <Link href={`/dashboard/projects/${projectId}/keywords`}>
+                    View All <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {keywordRankings.length === 0 ? (
+                <div className="text-center py-8">
+                  <Search className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+                  <h3 className="mt-4 text-lg font-medium">No keywords added yet</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Start tracking your target keywords to see your rankings
+                  </p>
+                  <Button className="mt-4" asChild>
+                    <Link href={`/dashboard/projects/${projectId}/keywords`}>
+                      <Search className="mr-2 h-4 w-4" /> Add Keywords
+                    </Link>
+                  </Button>
+                </div>
               ) : (
-                <span className="text-red-500">Poor</span>
-              )}
-            </div>
-          </div>
-          
-          <div className="border rounded-lg p-6 bg-background">
-            <div className="text-sm text-muted-foreground mb-2">Tracked Keywords</div>
-            <div className="text-3xl font-bold mb-1">{project.keywords?.length || 0}</div>
-            <div className="text-sm text-muted-foreground">
-              {keywordRankings.length > 0 ? 
-                `${keywordRankings.filter(k => k.position <= 10).length} in top 10` :
-                'No keywords tracked yet'
-              }
-            </div>
-          </div>
-          
-          <div className="border rounded-lg p-6 bg-background">
-            <div className="text-sm text-muted-foreground mb-2">Issues to Fix</div>
-            <div className="text-3xl font-bold mb-1">
-              {recommendations.filter(r => r.status !== 'resolved').length}
-            </div>
-            <div className="text-sm text-amber-500">
-              {recommendations.filter(r => r.priority === 'high' && r.status !== 'resolved').length} high priority
-            </div>
-          </div>
-        </div>
-        
-        <div className="grid gap-6 md:grid-cols-2 mb-6">
-          <div className="border rounded-lg overflow-hidden">
-            <div className="bg-muted px-6 py-4 border-b">
-              <h2 className="text-xl font-semibold">Keyword Rankings</h2>
-            </div>
-            <div className="p-6">
-              {keywordRankings.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b text-sm">
-                        <th className="text-left py-2 font-medium">Keyword</th>
-                        <th className="text-right py-2 font-medium">Position</th>
-                        <th className="text-right py-2 font-medium">Change</th>
+                      <tr className="border-b">
+                        <th className="pb-2 text-left font-medium">Keyword</th>
+                        <th className="pb-2 text-right font-medium">Position</th>
+                        <th className="pb-2 text-right font-medium">Change</th>
+                        <th className="pb-2 text-right font-medium">Last Updated</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {keywordRankings.map((keyword) => (
-                        <tr key={keyword.id} className="border-b last:border-0">
-                          <td className="py-2">{keyword.keyword}</td>
-                          <td className="text-right py-2">{keyword.position}</td>
-                          <td className="text-right py-2">
-                            {keyword.change > 0 ? (
-                              <span className="text-green-500">+{keyword.change}</span>
-                            ) : keyword.change < 0 ? (
-                              <span className="text-red-500">{keyword.change}</span>
+                      {keywordRankings.slice(0, 5).map((ranking) => (
+                        <tr key={ranking.id} className="border-b last:border-0 hover:bg-muted/50">
+                          <td className="py-3 text-left">{ranking.keyword}</td>
+                          <td className="py-3 text-right">
+                            {ranking.position > 0 ? ranking.position : 'N/A'}
+                          </td>
+                          <td className="py-3 text-right">
+                            {ranking.change > 0 ? (
+                              <span className="text-green-500">↑{ranking.change}</span>
+                            ) : ranking.change < 0 ? (
+                              <span className="text-red-500">↓{Math.abs(ranking.change)}</span>
                             ) : (
-                              <span>0</span>
+                              <span className="text-gray-400">-</span>
                             )}
+                          </td>
+                          <td className="py-3 text-right text-muted-foreground text-sm">
+                            {new Date(ranking.date_checked).toLocaleDateString()}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No keywords are being tracked yet
-                </div>
               )}
-              
-              <div className="mt-4">
-                <Button variant="outline" size="sm">
-                  Add Keywords
-                </Button>
-              </div>
-            </div>
-          </div>
-          
-          <div className="border rounded-lg overflow-hidden">
-            <div className="bg-muted px-6 py-4 border-b">
-              <h2 className="text-xl font-semibold">Competitors</h2>
-            </div>
-            <div className="p-6">
-              {project.competitors && project.competitors.length > 0 ? (
-                <ul className="space-y-2">
-                  {project.competitors.map((competitor, index) => (
-                    <li key={index} className="border p-3 rounded-md">
-                      <a 
-                        href={competitor} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-primary hover:underline"
-                      >
-                        {competitor}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No competitors added yet
-                </div>
-              )}
-              
-              <div className="mt-4">
-                <Button variant="outline" size="sm">
-                  Add Competitors
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
         
-        <div className="border rounded-lg overflow-hidden">
-          <div className="bg-muted px-6 py-4 border-b">
-            <h2 className="text-xl font-semibold">SEO Recommendations</h2>
-          </div>
-          <div className="p-6">
-            {recommendations.length > 0 ? (
+        <TabsContent value="content" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Content Analysis</CardTitle>
+              <CardDescription>
+                Analyze and optimize your content for better search rankings
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <div className="space-y-4">
-                {recommendations.map((rec) => (
-                  <div 
-                    key={rec.id} 
-                    className={`border p-4 rounded-md ${
-                      rec.status === 'resolved' ? 'border-green-200 bg-green-50' : ''
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center mb-1">
-                          <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
-                            rec.priority === 'high' 
-                              ? 'bg-red-500' 
-                              : rec.priority === 'medium' 
-                                ? 'bg-amber-500' 
-                                : 'bg-blue-500'
-                          }`}></span>
-                          <span className="font-medium">{rec.issue_type}</span>
-                          {rec.status === 'resolved' && (
-                            <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">
-                              Resolved
-                            </span>
-                          )}
-                          {rec.status === 'in_progress' && (
-                            <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
-                              In Progress
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground">{rec.description}</p>
-                      </div>
-                      {rec.status !== 'resolved' && (
-                        <Button variant="outline" size="sm">
-                          Mark Resolved
-                        </Button>
-                      )}
-                    </div>
+                <p className="text-sm text-muted-foreground">
+                  Use our AI-powered content analyzer to improve your content's SEO performance. 
+                  Analyze keyword usage, readability, and get actionable recommendations.
+                </p>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-lg font-medium">Content Optimizer</span>
+                    <span className="text-sm text-muted-foreground">
+                      AI-powered content optimization for better rankings
+                    </span>
                   </div>
-                ))}
+                  <Button asChild>
+                    <Link href={`/dashboard/projects/${projectId}/content`}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      Analyze Content
+                    </Link>
+                  </Button>
+                </div>
               </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No recommendations available
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="recommendations">
+          <Card>
+            <CardHeader>
+              <CardTitle>SEO Recommendations</CardTitle>
+              <CardDescription>
+                Issues and opportunities to improve your SEO
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {recommendations.length === 0 ? (
+                <div className="text-center py-8">
+                  <Zap className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+                  <h3 className="mt-4 text-lg font-medium">No recommendations yet</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Run a site audit to get personalized recommendations
+                  </p>
+                  <Button className="mt-4">
+                    Run Site Audit
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {recommendations.slice(0, 5).map((recommendation) => (
+                    <div key={recommendation.id} className="border rounded-lg p-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center">
+                            <span 
+                              className={`inline-block w-2 h-2 rounded-full mr-2 ${
+                                recommendation.priority === 'high' ? 'bg-red-500' :
+                                recommendation.priority === 'medium' ? 'bg-amber-500' :
+                                'bg-blue-500'
+                              }`}
+                            />
+                            <span className="font-medium">{recommendation.issue_type}</span>
+                            <span 
+                              className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                                recommendation.status === 'open' ? 'bg-gray-100 text-gray-800' :
+                                recommendation.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                                'bg-green-100 text-green-800'
+                              }`}
+                            >
+                              {recommendation.status.replace('_', ' ')}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm">{recommendation.description}</p>
+                        </div>
+                        <Button variant="outline" size="sm">Fix</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="competitors">
+          <Card>
+            <CardHeader>
+              <CardTitle>Competitor Analysis</CardTitle>
+              <CardDescription>
+                Track and compare your performance against competitors
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {(!project?.competitors || project.competitors.length === 0) ? (
+                <div className="text-center py-8">
+                  <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+                  <h3 className="mt-4 text-lg font-medium">No competitors added yet</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Add competitor websites to compare your performance
+                  </p>
+                  <Button className="mt-4">
+                    <Share2 className="mr-2 h-4 w-4" /> Add Competitors
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {project.competitors.map((competitor, index) => (
+                    <div key={index} className="flex items-center justify-between border rounded-lg p-4">
+                      <div>
+                        <div className="font-medium">{competitor}</div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Domain Authority: 42 • Ranking Keywords: 1,245
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        Analyze
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 } 
