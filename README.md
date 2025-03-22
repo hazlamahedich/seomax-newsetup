@@ -1,36 +1,131 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SEOMax - AI-Powered SEO Platform
+
+SEOMax is a modern web application built to help users optimize their websites for search engines using AI-powered analysis and recommendations.
+
+## Features
+
+- **User Authentication**: Secure signup, login, and account management
+- **Project Management**: Create and manage multiple projects for different websites
+- **Content Analysis**: Analyze website content for readability, keywords, and structure
+- **Content Page Management**: Add and analyze individual pages from your website
+- **Competitor Analysis**: Compare your content against competitors
+- **Content Optimization**: Get AI-powered suggestions to improve your content
+- **Content Briefs**: Create and manage content briefs for new articles
+
+## Tech Stack
+
+- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
+- **UI Components**: shadcn/ui component library
+- **Authentication**: Supabase Auth
+- **Database**: PostgreSQL (via Supabase)
+- **State Management**: Server components with dynamic rendering
+- **Styling**: Tailwind CSS with custom theming
+- **Deployment**: Vercel
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 16.8 or later
+- npm or yarn
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/seomax.git
+cd seomax
+```
+
+2. Install dependencies:
+```bash
+npm install
+# or
+yarn install
+```
+
+3. Set up environment variables:
+Create a `.env.local` file in the root directory with the following variables:
+```
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+4. Run the development server:
 ```bash
 npm run dev
 # or
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+5. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+seomax/
+├── src/                # Application source code
+│   ├── app/            # Next.js app router files
+│   │   ├── dashboard/  # Protected dashboard routes
+│   │   ├── login/      # Authentication pages
+│   │   └── ...         # Other app routes
+│   ├── components/     # Reusable UI components
+│   │   ├── ui/         # UI component library
+│   │   ├── content/    # Content-specific components
+│   │   └── ...         # Other component categories
+│   ├── hooks/          # Custom React hooks
+│   ├── lib/            # Utility functions and libraries
+│   │   ├── services/   # Service layer for backend communication
+│   │   ├── supabase/   # Supabase client configuration
+│   │   └── types/      # TypeScript type definitions
+│   └── styles/         # Global styles
+├── public/             # Static files
+├── .env.local          # Environment variables (create this file)
+├── next.config.js      # Next.js configuration
+├── package.json        # Project dependencies
+├── tailwind.config.js  # Tailwind CSS configuration
+└── tsconfig.json       # TypeScript configuration
+```
 
-## Learn More
+## Database Schema
 
-To learn more about Next.js, take a look at the following resources:
+The application uses Supabase as the database with the following main tables:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **users** - User account information
+- **projects** - Website projects for content optimization
+- **content_pages** - Individual pages from websites for analysis
+- **content_analysis** - Analysis results for content pages
+- **content_suggestions** - Improvement suggestions for content
+- **competitor_content** - Competitor content for comparison
+- **competitor_analysis** - Analysis of competitor content
+- **content_briefs** - Content briefs for creating new content
+- **topic_clusters** - Topic clusters for content organization
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Content Management Features
 
-## Deploy on Vercel
+- **Content Page Analysis**: Analyze readability, keyword usage, and structure
+- **Competitor Content Analysis**: Compare your content against competitors
+- **Content Optimization Suggestions**: Get AI-powered recommendations
+- **Content Brief Generator**: Create detailed briefs for new content
+- **Topic Clustering**: Organize content by related topics
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Contributing
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- [Next.js](https://nextjs.org/)
+- [Supabase](https://supabase.io/)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [shadcn/ui](https://ui.shadcn.com/)
