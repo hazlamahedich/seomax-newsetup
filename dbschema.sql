@@ -286,4 +286,132 @@ CREATE POLICY competitor_backlinks_user_policy
   FOR ALL
   USING (project_id IN (
     SELECT id FROM public.projects WHERE user_id = auth.uid()
-  )); 
+  ));
+
+-- Phase 2: Technical SEO Analysis Tables
+
+-- Site crawls table to store crawl sessions
+CREATE TABLE IF NOT EXISTS site_crawls (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  start_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  end_time TIMESTAMP WITH TIME ZONE,
+  pages_crawled INTEGER DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'in_progress',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  user_id UUID NOT NULL REFERENCES auth.users(id)
+);
+
+-- Enable RLS on site_crawls
+ALTER TABLE site_crawls ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for site_crawls
+CREATE POLICY site_crawls_policy ON site_crawls
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- Crawled pages table to store individual pages found during crawls
+CREATE TABLE IF NOT EXISTS crawled_pages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  site_crawl_id UUID NOT NULL REFERENCES site_crawls(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  title TEXT,
+  meta_description TEXT,
+  h1 TEXT,
+  status_code INTEGER,
+  content_type TEXT,
+  word_count INTEGER,
+  depth INTEGER DEFAULT 0,
+  crawl_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  html_content TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS on crawled_pages
+ALTER TABLE crawled_pages ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for crawled_pages (join with site_crawls to check user_id)
+CREATE POLICY crawled_pages_policy ON crawled_pages
+  USING (site_crawl_id IN (SELECT id FROM site_crawls WHERE user_id = auth.uid()))
+  WITH CHECK (site_crawl_id IN (SELECT id FROM site_crawls WHERE user_id = auth.uid()));
+
+-- Technical issues table to store identified SEO issues
+CREATE TABLE IF NOT EXISTS technical_issues (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  crawled_page_id UUID NOT NULL REFERENCES crawled_pages(id) ON DELETE CASCADE,
+  issue_type TEXT NOT NULL,
+  description TEXT NOT NULL,
+  severity TEXT NOT NULL, -- 'critical', 'warning', 'info'
+  fixed_status BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS on technical_issues
+ALTER TABLE technical_issues ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for technical_issues (join with crawled_pages and site_crawls to check user_id)
+CREATE POLICY technical_issues_policy ON technical_issues
+  USING (crawled_page_id IN (
+    SELECT cp.id FROM crawled_pages cp
+    JOIN site_crawls sc ON cp.site_crawl_id = sc.id
+    WHERE sc.user_id = auth.uid()
+  ))
+  WITH CHECK (crawled_page_id IN (
+    SELECT cp.id FROM crawled_pages cp
+    JOIN site_crawls sc ON cp.site_crawl_id = sc.id
+    WHERE sc.user_id = auth.uid()
+  ));
+
+-- Page performance table to store performance metrics
+CREATE TABLE IF NOT EXISTS page_performance (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  crawled_page_id UUID NOT NULL REFERENCES crawled_pages(id) ON DELETE CASCADE,
+  mobile_score INTEGER,
+  desktop_score INTEGER,
+  lcp FLOAT, -- Largest Contentful Paint
+  fid FLOAT, -- First Input Delay
+  cls FLOAT, -- Cumulative Layout Shift
+  ttfb FLOAT, -- Time to First Byte
+  load_time FLOAT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS on page_performance
+ALTER TABLE page_performance ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for page_performance (join with crawled_pages and site_crawls to check user_id)
+CREATE POLICY page_performance_policy ON page_performance
+  USING (crawled_page_id IN (
+    SELECT cp.id FROM crawled_pages cp
+    JOIN site_crawls sc ON cp.site_crawl_id = sc.id
+    WHERE sc.user_id = auth.uid()
+  ))
+  WITH CHECK (crawled_page_id IN (
+    SELECT cp.id FROM crawled_pages cp
+    JOIN site_crawls sc ON cp.site_crawl_id = sc.id
+    WHERE sc.user_id = auth.uid()
+  ));
+
+-- Site structure table to store page relationships for site architecture
+CREATE TABLE IF NOT EXISTS site_structure (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  site_crawl_id UUID NOT NULL REFERENCES site_crawls(id) ON DELETE CASCADE,
+  source_page_id UUID NOT NULL REFERENCES crawled_pages(id) ON DELETE CASCADE,
+  target_page_id UUID NOT NULL REFERENCES crawled_pages(id) ON DELETE CASCADE,
+  link_text TEXT,
+  link_type TEXT DEFAULT 'internal', -- 'internal', 'external', 'resource'
+  is_followed BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS on site_structure
+ALTER TABLE site_structure ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for site_structure (join with site_crawls to check user_id)
+CREATE POLICY site_structure_policy ON site_structure
+  USING (site_crawl_id IN (SELECT id FROM site_crawls WHERE user_id = auth.uid()))
+  WITH CHECK (site_crawl_id IN (SELECT id FROM site_crawls WHERE user_id = auth.uid())); 

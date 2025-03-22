@@ -3,8 +3,8 @@
 ## Technologies Used
 
 ### Framework & Frontend
-- **Next.js 14+**: Using App Router for improved rendering and routing
-- **React**: UI library for component-based architecture
+- **Next.js 15+**: Using App Router for improved rendering and routing
+- **React 19**: UI library for component-based architecture
 - **TypeScript**: For type-safe code and improved developer experience
 - **Tailwind CSS**: For utility-first styling
 - **shadcn/ui**: Component library built on Radix UI with Tailwind styling
@@ -27,13 +27,15 @@
 - **Service Classes**: For encapsulated data operations
 
 ### Data Visualization
-- **Chart.js**: For creating interactive charts and graphs
-- **react-chartjs-2**: React wrapper for Chart.js
+- **Recharts**: For creating interactive charts and graphs
+- **Card-based metrics**: For displaying key performance indicators
 
 ### AI Integration
-- **LangChain.js**: Framework for LLM application development (planned)
-- **LangGraph.js**: For multi-step AI workflows (planned)
-- **Anthropic's Claude API**: For content analysis (planned)
+- **LangChain**: Framework for LLM application development
+- **ChatOpenAI**: For interfacing with OpenAI's models
+- **Custom Prompt Templates**: For structured AI interactions
+- **Structured Output Parsing**: For consistent JSON responses
+- **Custom Type Declarations**: For TypeScript compatibility
 
 ## Development Setup
 
@@ -41,6 +43,7 @@
 ```
 NEXT_PUBLIC_SUPABASE_URL=<your-supabase-url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
+OPENAI_API_KEY=<your-openai-api-key>
 ```
 
 ### Local Development
@@ -63,49 +66,50 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
 - Mixing client and server components requires careful organization
 - Some third-party libraries need adaptation for React Server Components
 
+### LangChain Limitations
+- Need custom type declarations for some LangChain modules
+- Some modules like text splitters may not be available in the npm registry
+- Potential differences between documentation and actual package exports
+
 ### Performance Considerations
-- Heavy visualizations and animations only for key user interactions
+- Heavy AI operations performed server-side to avoid client-side latency
 - Server components for initial rendering when possible
 - Strategic use of client components for interactivity
+- AI requests optimized to minimize token usage
 
 ## Dependencies
 
 ### Core Dependencies
-- next
-- react
-- react-dom
-- typescript
-- tailwindcss
-- postcss
-- autoprefixer
+- next: 15.2.3
+- react: ^19.0.0
+- react-dom: ^19.0.0
+- typescript: ^5
+- tailwindcss: ^4
+- postcss: ^4
 - @radix-ui/* (various UI primitives)
-- class-variance-authority
-- clsx
-- lucide-react (icons)
+- class-variance-authority: ^0.7.1
+- clsx: ^2.1.1
+- lucide-react: ^0.483.0 (icons)
 
 ### State Management
 - zustand
-- @tanstack/react-query
+- @tanstack/react-query: ^5.69.0
 
 ### Form Handling
-- react-hook-form
-- @hookform/resolvers
-- zod
+- react-hook-form: ^7.54.2
+- @hookform/resolvers: ^4.1.3
+- zod: ^3.24.2
 
 ### Data Fetching
-- @supabase/auth-helpers-nextjs
-- @supabase/supabase-js
+- @supabase/supabase-js: ^2.49.1
 
-### Backlink Analysis
-- chart.js
-- react-chartjs-2
-- date-fns (for date formatting in reports)
-- react-datepicker (for scheduling reports)
+### AI and Content Analysis
+- langchain: ^0.3.19
+- jsdom: ^26.0.0
+- @mozilla/readability: ^0.6.0
 
-### Animation
-- framer-motion
-
-### Future Additions
-- langchain
-- ai (Vercel AI SDK)
-- zod-to-json-schema (for API schema definition) 
+### Animation and UI
+- framer-motion: ^12.5.0
+- recharts: ^2.12.2
+- tailwind-merge: ^3.0.2
+- next-themes: ^0.4.6 

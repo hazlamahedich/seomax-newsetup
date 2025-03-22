@@ -1,0 +1,40 @@
+# SEOMax Project Intelligence
+
+## Critical Implementation Paths
+- AI analysis should be performed server-side to avoid exposing API keys
+- Use dynamic rendering with "use client" directives for interactive components
+- Always use service classes for data operations to maintain separation of concerns
+- Keyword analysis and content analysis are core AI features, implemented with LangChain
+
+## User Preferences and Workflow
+- User expects clean, responsive UI with clear navigation
+- Tabbed interfaces preferred for organizing related content
+- Card-based metrics for displaying key performance indicators
+- AI analysis should have clear loading states with spinners
+- Results should be presented in well-structured, tabbed formats
+
+## Project-Specific Patterns
+- All AI service classes use structured prompts with JSON output
+- Error handling for AI service calls is essential
+- Use custom type declarations for third-party libraries when needed
+- Keyword rankings should be tracked over time for trend analysis
+- Projects are the main organizational unit, with keywords and content nested under them
+
+## Known Challenges
+- LangChain package imports differ from documentation in some cases
+- Some LangChain modules are not available in the npm registry
+- Missing dependencies should be addressed with custom implementations
+- Service classes should handle API errors gracefully to prevent UI crashes
+
+## Evolution of Project Decisions
+- Moved from @langchain/* packages to vanilla langchain due to availability
+- Implemented custom text splitting functionality instead of using RecursiveCharacterTextSplitter
+- Created type declarations for LangChain modules to fix TypeScript errors
+- Changed import paths to match available module structure
+
+## Tool Usage Patterns
+- Use grep_search for finding specific code patterns
+- Use codebase_search for understanding implementation approaches
+- List directories to understand project structure before diving in
+- Edit files with careful attention to existing patterns and imports
+- Always check package.json for available dependencies before suggesting new ones 

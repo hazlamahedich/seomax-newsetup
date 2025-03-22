@@ -1,13 +1,14 @@
 # SEOMax - AI-Powered SEO Optimization Platform
 
-A Next.js application that leverages AI to provide comprehensive SEO analysis, content optimization, and backlink management.
+A Next.js application that leverages AI to provide comprehensive SEO analysis, content optimization, and keyword research.
 
 ## Features
 
 ### Core SEO Analysis
 - Website performance analysis
-- Keyword research and planning
+- Keyword research and planning with AI insights
 - On-page SEO optimization suggestions
+- Domain overview dashboard with key metrics
 
 ### Content Management & Optimization
 - Content quality analysis
@@ -16,21 +17,23 @@ A Next.js application that leverages AI to provide comprehensive SEO analysis, c
 - Competitor content analysis
 - Content brief generation
 
-### Backlink Analysis & Management
-- Backlink tracking and monitoring
-- Backlink quality scoring
-- Competitor backlink gap analysis
-- Automated report generation
-- Backlink visualization dashboards
-- Scheduled reporting capabilities
+### Keyword Research & Analysis
+- AI-powered keyword research
+- Semantic keyword analysis
+- Keyword competition analysis
+- Related keyword suggestions
+- Content idea generation
+- Keyword trend analysis
+- Keyword prioritization
 
 ### Technical Infrastructure
-- Next.js 14+ with App Router
+- Next.js 15+ with App Router
 - Supabase for authentication and data storage
 - Tailwind CSS with shadcn/ui components
 - React Query for data fetching
 - Zustand for state management
 - Framer Motion for animations
+- LangChain for AI integrations
 
 ## Project Structure
 
@@ -41,19 +44,21 @@ src/
 │   ├── auth/             # Authentication pages
 │   ├── dashboard/        # Dashboard pages for SEO tools
 │   │   ├── content/      # Content management section
-│   │   ├── backlinks/    # Backlink analysis section
+│   │   ├── projects/     # Project management
 │   │   └── keywords/     # Keyword research section
 │   └── page.tsx          # Homepage
 ├── components/           # React components
 │   ├── ui/               # UI components from shadcn
 │   ├── content/          # Content-related components
-│   ├── backlinks/        # Backlink-related components
+│   ├── projects/         # Project-related components
 │   └── auth/             # Authentication components
 ├── lib/                  # Utility libraries
 │   ├── services/         # Service classes for data operations
+│   ├── ai/               # AI analysis functionality
 │   ├── supabase/         # Supabase client setup
 │   ├── store/            # Zustand state management
 │   └── types/            # TypeScript type definitions
+├── hooks/                # Custom React hooks
 └── styles/               # Global styles
 ```
 
@@ -68,6 +73,7 @@ src/
    ```
    NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+   OPENAI_API_KEY=your-openai-api-key
    ```
 4. Run the development server:
    ```
@@ -78,65 +84,37 @@ src/
 ## Development Status
 
 - ✅ Project setup and configuration
-- ✅ Authentication system
+- ✅ Authentication system with Supabase
 - ✅ Database schema design
-- ✅ Content management features
+- ✅ Project management interface
+- ✅ Keyword research interface
+- ✅ AI-powered keyword analysis
 - ✅ Content analysis components
-- ✅ Backlink analysis and tracking
-- ✅ Competitor backlink gap analysis
-- ✅ Automated report generation
+- ✅ Domain overview dashboard
+- 🔄 Content optimization features
+- 🔄 On-page SEO analysis
+- 🔄 Backlink analysis
 - 🔄 UI enhancements and animations
-- 🔄 Natural language query interface
-- 🔄 Comprehensive help system
-
-## Project Structure
-
-```
-seomax/
-├── src/                # Application source code
-│   ├── app/            # Next.js app router files
-│   │   ├── dashboard/  # Protected dashboard routes
-│   │   ├── login/      # Authentication pages
-│   │   └── ...         # Other app routes
-│   ├── components/     # Reusable UI components
-│   │   ├── ui/         # UI component library
-│   │   ├── content/    # Content-specific components
-│   │   └── ...         # Other component categories
-│   ├── hooks/          # Custom React hooks
-│   ├── lib/            # Utility functions and libraries
-│   │   ├── services/   # Service layer for backend communication
-│   │   ├── supabase/   # Supabase client configuration
-│   │   └── types/      # TypeScript type definitions
-│   └── styles/         # Global styles
-├── public/             # Static files
-├── .env.local          # Environment variables (create this file)
-├── next.config.js      # Next.js configuration
-├── package.json        # Project dependencies
-├── tailwind.config.js  # Tailwind CSS configuration
-└── tsconfig.json       # TypeScript configuration
-```
 
 ## Database Schema
 
 The application uses Supabase as the database with the following main tables:
 
 - **users** - User account information
-- **projects** - Website projects for content optimization
+- **projects** - Website projects for SEO optimization
+- **keyword_rankings** - Keyword position tracking
 - **content_pages** - Individual pages from websites for analysis
 - **content_analysis** - Analysis results for content pages
 - **content_suggestions** - Improvement suggestions for content
-- **competitor_content** - Competitor content for comparison
-- **competitor_analysis** - Analysis of competitor content
-- **content_briefs** - Content briefs for creating new content
-- **topic_clusters** - Topic clusters for content organization
+- **seo_recommendations** - Technical SEO recommendations
 
-## Content Management Features
+## AI-Powered Features
 
-- **Content Page Analysis**: Analyze readability, keyword usage, and structure
-- **Competitor Content Analysis**: Compare your content against competitors
-- **Content Optimization Suggestions**: Get AI-powered recommendations
-- **Content Brief Generator**: Create detailed briefs for new content
-- **Topic Clustering**: Organize content by related topics
+- **Keyword Research**: Generate related keywords, content ideas, and keyword clusters
+- **Keyword Competition Analysis**: Analyze the competitive landscape for keywords
+- **Keyword Trend Analysis**: Identify trends and seasonality for keywords
+- **Content Analysis**: Analyze readability, keyword usage, and structure
+- **Content Optimization**: Get AI-powered recommendations for improvement
 
 ## Contributing
 
@@ -158,3 +136,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Supabase](https://supabase.io/)
 - [Tailwind CSS](https://tailwindcss.com/)
 - [shadcn/ui](https://ui.shadcn.com/)
+- [LangChain](https://js.langchain.com/)

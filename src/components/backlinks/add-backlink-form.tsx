@@ -3,22 +3,22 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, ControllerRenderProps } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { toast } from "@/components/ui/use-toast";
-import { BacklinkService } from "@/lib/services/backlink-service";
+import { useToast } from "@/components/ui/use-toast";
+import { createClient } from "@/lib/supabase/client";
 
 // Form validation schema
 const formSchema = z.object({
   sourceUrl: z.string().url({ message: "Please enter a valid URL" }),
   targetUrl: z.string().url({ message: "Please enter a valid URL" }),
   anchorText: z.string().optional(),
-  linkType: z.enum(["external", "internal", "nofollow"])
+  linkType: z.string().default('external'),
 });
 
 // Type for form values
@@ -26,12 +26,14 @@ type FormValues = z.infer<typeof formSchema>;
 
 interface AddBacklinkFormProps {
   projectId: string;
-  userId: string;
 }
 
-export default function AddBacklinkForm({ projectId, userId }: AddBacklinkFormProps) {
+export default function AddBacklinkForm({ projectId }: AddBacklinkFormProps) {
+  const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const supabase = createClient();
   
   // Initialize form
   const form = useForm<FormValues>({
@@ -40,7 +42,7 @@ export default function AddBacklinkForm({ projectId, userId }: AddBacklinkFormPr
       sourceUrl: "",
       targetUrl: "",
       anchorText: "",
-      linkType: "external"
+      linkType: "external",
     },
   });
   
@@ -49,33 +51,44 @@ export default function AddBacklinkForm({ projectId, userId }: AddBacklinkFormPr
     setIsSubmitting(true);
     
     try {
-      const result = await BacklinkService.addBacklink(
-        projectId,
-        values.sourceUrl,
-        values.targetUrl,
-        values.anchorText || undefined,
-        values.linkType
-      );
+      // Add the backlink directly using Supabase
+      const { data, error } = await supabase
+        .from('backlinks')
+        .insert([
+          {
+            project_id: projectId,
+            source_url: values.sourceUrl,
+            target_url: values.targetUrl,
+            anchor_text: values.anchorText || null,
+            link_type: values.linkType,
+            status: 'active',
+            first_discovered: new Date().toISOString(),
+            last_checked: new Date().toISOString(),
+            // Mock values for demo
+            page_authority: Math.floor(Math.random() * 100),
+            domain_authority: Math.floor(Math.random() * 100),
+          }
+        ])
+        .select();
       
-      if (result) {
-        toast({
-          title: "Backlink added successfully",
-          description: "Your new backlink has been added to the tracking system.",
-        });
-        router.push("/dashboard/backlinks");
-        router.refresh();
-      } else {
-        toast({
-          title: "Error adding backlink",
-          description: "There was an error adding your backlink. Please try again.",
-          variant: "destructive",
-        });
+      if (error) {
+        throw error;
       }
-    } catch (error) {
-      console.error("Error adding backlink:", error);
+      
       toast({
-        title: "Error adding backlink",
-        description: "There was an error adding your backlink. Please try again.",
+        title: "Success!",
+        description: "Backlink added successfully",
+        variant: "default",
+      });
+      
+      form.reset();
+      router.refresh();
+      
+    } catch (error: any) {
+      console.error('Error adding backlink:', error);
+      toast({
+        title: "Error",
+        description: `Failed to add backlink: ${error.message}`,
         variant: "destructive",
       });
     } finally {
@@ -85,15 +98,15 @@ export default function AddBacklinkForm({ projectId, userId }: AddBacklinkFormPr
   
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
           name="sourceUrl"
-          render={({ field }: { field: ControllerRenderProps<FormValues, "sourceUrl"> }) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Source URL</FormLabel>
               <FormControl>
-                <Input placeholder="https://example.com/page-linking-to-you" {...field} />
+                <Input placeholder="https://example.com/page-with-backlink" {...field} />
               </FormControl>
               <FormDescription>
                 The URL of the page containing the link to your website.
@@ -106,11 +119,11 @@ export default function AddBacklinkForm({ projectId, userId }: AddBacklinkFormPr
         <FormField
           control={form.control}
           name="targetUrl"
-          render={({ field }: { field: ControllerRenderProps<FormValues, "targetUrl"> }) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Target URL</FormLabel>
               <FormControl>
-                <Input placeholder="https://yourwebsite.com/target-page" {...field} />
+                <Input placeholder="https://yoursite.com/target-page" {...field} />
               </FormControl>
               <FormDescription>
                 The URL of your page being linked to.
@@ -123,11 +136,11 @@ export default function AddBacklinkForm({ projectId, userId }: AddBacklinkFormPr
         <FormField
           control={form.control}
           name="anchorText"
-          render={({ field }: { field: ControllerRenderProps<FormValues, "anchorText"> }) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Anchor Text</FormLabel>
               <FormControl>
-                <Input placeholder="Click here" {...field} />
+                <Input placeholder="Optional anchor text" {...field} />
               </FormControl>
               <FormDescription>
                 The clickable text of the link (optional).
@@ -140,13 +153,10 @@ export default function AddBacklinkForm({ projectId, userId }: AddBacklinkFormPr
         <FormField
           control={form.control}
           name="linkType"
-          render={({ field }: { field: ControllerRenderProps<FormValues, "linkType"> }) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Link Type</FormLabel>
-              <Select 
-                onValueChange={field.onChange} 
-                defaultValue={field.value}
-              >
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select link type" />

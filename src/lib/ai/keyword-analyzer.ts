@@ -1,258 +1,314 @@
-import { ChatOpenAI } from 'langchain/chat_models/openai';
-import { PromptTemplate } from 'langchain/prompts';
-import { StringOutputParser } from 'langchain/schema/output_parser';
-import { RunnableSequence } from 'langchain/schema/runnable';
+import { ChatOpenAI } from "@langchain/openai";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { StructuredOutputParser } from "@langchain/core/output_parsers";
+import { StringOutputParser } from "@langchain/core/output_parsers";
+import { RunnableSequence } from "@langchain/core/runnables";
+import { z } from "zod";
 
-// Initialize the AI model with OpenAI
+// Initialize OpenAI model
 const model = new ChatOpenAI({
-  openAIApiKey: process.env.OPENAI_API_KEY,
-  modelName: 'gpt-4',
-  temperature: 0.1
+  temperature: 0.7,
+  modelName: "gpt-4",
 });
 
-const outputParser = new StringOutputParser();
-
-// Prompt template for keyword research
+// Define keyword research prompt
 const keywordResearchPrompt = PromptTemplate.fromTemplate(`
-You are an expert SEO keyword researcher. Analyze the following main keyword and generate related keywords, content ideas, and keyword clusters:
+You are an expert SEO keyword researcher. Analyze the following main keyword and generate related keywords, content ideas, and keyword clustering.
 
-MAIN KEYWORD: {keyword}
-INDUSTRY/NICHE: {industry}
+Main Keyword: {mainKeyword}
+Industry/Niche: {industry}
 
-Return a JSON object with the following structure:
+Provide a comprehensive analysis with the following information:
+1. Related long-tail keywords that would be valuable to target
+2. Search intent analysis for the main keyword
+3. Content topic ideas based on the keyword
+4. Keyword clustering opportunities
+5. Competition level assessment
+
+Format your response as a JSON object with the following structure:
 {
-  "mainKeyword": "{keyword}",
+  "mainKeyword": "the main keyword",
   "relatedKeywords": [
-    {"keyword": "<related_keyword_1>", "searchVolume": "<estimated_volume>", "difficulty": "<low|medium|high>"},
-    {"keyword": "<related_keyword_2>", "searchVolume": "<estimated_volume>", "difficulty": "<low|medium|high>"},
-    ...
+    {"keyword": "related keyword 1", "searchVolume": "estimated monthly searches", "difficulty": "low/medium/high", "intent": "informational/transactional/navigational"},
+    {"keyword": "related keyword 2", "searchVolume": "estimated monthly searches", "difficulty": "low/medium/high", "intent": "informational/transactional/navigational"}
   ],
   "contentIdeas": [
-    {"title": "<content_idea_1>", "type": "<blog|guide|infographic|video>", "targetKeywords": ["<kw1>", "<kw2>"]},
-    {"title": "<content_idea_2>", "type": "<blog|guide|infographic|video>", "targetKeywords": ["<kw1>", "<kw2>"]},
-    ...
+    {"title": "Potential content title 1", "format": "blog/guide/comparison", "topicRelevance": "high/medium/low"},
+    {"title": "Potential content title 2", "format": "blog/guide/comparison", "topicRelevance": "high/medium/low"}
   ],
   "keywordClusters": [
-    {"name": "<cluster_name_1>", "keywords": ["<kw1>", "<kw2>", "<kw3>"]},
-    {"name": "<cluster_name_2>", "keywords": ["<kw1>", "<kw2>", "<kw3>"]},
-    ...
+    {"clusterName": "Cluster 1 name", "keywords": ["keyword1", "keyword2", "keyword3"]},
+    {"clusterName": "Cluster 2 name", "keywords": ["keyword4", "keyword5", "keyword6"]}
   ],
-  "analysis": "<brief_analysis_of_keyword_opportunity>"
+  "competitionAnalysis": "Brief analysis of competition level and difficulty",
+  "recommendedStrategy": "Strategic recommendations for targeting these keywords"
 }
 `);
 
-const keywordResearchChain = RunnableSequence.from([
-  keywordResearchPrompt,
-  model,
-  outputParser,
-]);
-
-// Prompt template for keyword competition analysis
+// Define keyword competition analysis prompt
 const keywordCompetitionPrompt = PromptTemplate.fromTemplate(`
-You are an expert SEO competition analyst. Analyze the competitive landscape for the following keywords:
+You are an expert SEO competition analyst. Provide a detailed competition analysis for the following keywords in the specified industry.
 
-KEYWORDS: {keywords}
-INDUSTRY/NICHE: {industry}
+Keywords: {keywords}
+Industry/Niche: {industry}
 
-Return a JSON object with the following structure:
+Assess the competition landscape and provide insights on:
+1. Difficulty level for each keyword
+2. Top competing websites for these keywords
+3. Content gaps and opportunities
+4. Recommended approach for targeting these keywords
+
+Format your response as a JSON object with the following structure:
 {
-  "difficulty": "<overall_difficulty_assessment>",
-  "topCompetitors": [
-    {"domain": "<competitor_domain_1>", "strengths": ["<strength_1>", "<strength_2>"], "weaknesses": ["<weakness_1>", "<weakness_2>"]},
-    {"domain": "<competitor_domain_2>", "strengths": ["<strength_1>", "<strength_2>"], "weaknesses": ["<weakness_1>", "<weakness_2>"]},
-    ...
-  ],
-  "contentGaps": [
-    "<content_gap_opportunity_1>",
-    "<content_gap_opportunity_2>",
-    ...
-  ],
-  "keywordTargetingStrategy": "<recommended_approach_for_targeting_these_keywords>",
-  "difficultyByKeyword": [
-    {"keyword": "<keyword_1>", "difficulty": "<low|medium|high>", "reason": "<brief_reason>"},
-    {"keyword": "<keyword_2>", "difficulty": "<low|medium|high>", "reason": "<brief_reason>"},
-    ...
-  ]
-}
-`);
-
-const keywordCompetitionChain = RunnableSequence.from([
-  keywordCompetitionPrompt,
-  model,
-  outputParser,
-]);
-
-// Prompt template for keyword trend analysis
-const keywordTrendPrompt = PromptTemplate.fromTemplate(`
-You are an expert SEO trend analyst. Analyze the trends for the following keyword and industry:
-
-KEYWORD: {keyword}
-INDUSTRY/NICHE: {industry}
-
-Return a JSON object with the following structure:
-{
-  "trendDirection": "<growing|stable|declining>",
-  "seasonality": {
-    "pattern": "<none|monthly|quarterly|annual>",
-    "peakMonths": ["<month_1>", "<month_2>"],
-    "lowMonths": ["<month_1>", "<month_2>"]
+  "keywords": ["keyword1", "keyword2", "..."],
+  "competitionAnalysis": {
+    "overallDifficulty": "low/medium/high",
+    "keywordDifficulties": [
+      {"keyword": "keyword1", "difficulty": "score 1-100", "explanation": "Why this difficulty score"}
+    ],
+    "topCompetitors": [
+      {"domain": "competitor.com", "strengths": "What makes them rank well", "weaknesses": "Where they fall short"}
+    ]
   },
-  "emergingTerms": [
-    {"term": "<emerging_term_1>", "relevance": "<high|medium|low>"},
-    {"term": "<emerging_term_2>", "relevance": "<high|medium|low>"},
-    ...
+  "contentGaps": [
+    {"topic": "Underserved topic", "opportunity": "Why this is an opportunity", "suggestedAngle": "How to approach it"}
   ],
-  "recommendedTiming": "<recommendation_for_when_to_target_this_keyword>",
-  "analysis": "<brief_analysis_of_trend_observations>"
+  "keywordTargetingStrategy": "Overall recommended strategy for targeting these keywords"
 }
 `);
 
-const keywordTrendChain = RunnableSequence.from([
-  keywordTrendPrompt,
-  model,
-  outputParser,
-]);
+// Define keyword trend analysis prompt
+const keywordTrendPrompt = PromptTemplate.fromTemplate(`
+You are an expert SEO trend analyst. Analyze the trend patterns for the following keyword in the specified industry.
 
-// Interface for keyword research results
+Keyword: {keyword}
+Industry/Niche: {industry}
+
+Provide insights on:
+1. Growth direction (rising, stable, declining)
+2. Seasonal patterns if any
+3. Emerging related terms
+4. Future potential of this keyword
+
+Format your response as a JSON object with the following structure:
+{
+  "keyword": "the analyzed keyword",
+  "trendAnalysis": {
+    "growthDirection": "rising/stable/declining",
+    "growthRate": "percentage or qualitative assessment",
+    "seasonality": {
+      "hasSeasonal": true/false,
+      "peakMonths": ["month1", "month2"],
+      "lowMonths": ["month3", "month4"]
+    }
+  },
+  "relatedEmergingTerms": [
+    {"term": "emerging term 1", "growthRate": "fast/medium/slow", "relevance": "high/medium/low"},
+    {"term": "emerging term 2", "growthRate": "fast/medium/slow", "relevance": "high/medium/low"}
+  ],
+  "futurePotential": "Assessment of future viability and potential",
+  "recommendedAction": "Whether to invest in this keyword or not and why"
+}
+`);
+
+// Define output schemas
+const keywordResearchSchema = z.object({
+  mainKeyword: z.string(),
+  relatedKeywords: z.array(
+    z.object({
+      keyword: z.string(),
+      searchVolume: z.string(),
+      difficulty: z.string(),
+      intent: z.string(),
+    })
+  ),
+  contentIdeas: z.array(
+    z.object({
+      title: z.string(),
+      format: z.string(),
+      topicRelevance: z.string(),
+    })
+  ),
+  keywordClusters: z.array(
+    z.object({
+      clusterName: z.string(),
+      keywords: z.array(z.string()),
+    })
+  ),
+  competitionAnalysis: z.string(),
+  recommendedStrategy: z.string(),
+});
+
+const keywordCompetitionSchema = z.object({
+  keywords: z.array(z.string()),
+  competitionAnalysis: z.object({
+    overallDifficulty: z.string(),
+    keywordDifficulties: z.array(
+      z.object({
+        keyword: z.string(),
+        difficulty: z.string(),
+        explanation: z.string(),
+      })
+    ),
+    topCompetitors: z.array(
+      z.object({
+        domain: z.string(),
+        strengths: z.string(),
+        weaknesses: z.string(),
+      })
+    ),
+  }),
+  contentGaps: z.array(
+    z.object({
+      topic: z.string(),
+      opportunity: z.string(),
+      suggestedAngle: z.string(),
+    })
+  ),
+  keywordTargetingStrategy: z.string(),
+});
+
+const keywordTrendSchema = z.object({
+  keyword: z.string(),
+  trendAnalysis: z.object({
+    growthDirection: z.string(),
+    growthRate: z.string(),
+    seasonality: z.object({
+      hasSeasonal: z.boolean(),
+      peakMonths: z.array(z.string()),
+      lowMonths: z.array(z.string()),
+    }),
+  }),
+  relatedEmergingTerms: z.array(
+    z.object({
+      term: z.string(),
+      growthRate: z.string(),
+      relevance: z.string(),
+    })
+  ),
+  futurePotential: z.string(),
+  recommendedAction: z.string(),
+});
+
+// Create output parsers
+const keywordResearchParser = StructuredOutputParser.fromZodSchema(keywordResearchSchema);
+const keywordCompetitionParser = StructuredOutputParser.fromZodSchema(keywordCompetitionSchema);
+const keywordTrendParser = StructuredOutputParser.fromZodSchema(keywordTrendSchema);
+
 export interface KeywordResearchResult {
   mainKeyword: string;
   relatedKeywords: Array<{
     keyword: string;
     searchVolume: string;
-    difficulty: 'low' | 'medium' | 'high';
+    difficulty: string;
+    intent: string;
   }>;
   contentIdeas: Array<{
     title: string;
-    type: string;
-    targetKeywords: string[];
+    format: string;
+    topicRelevance: string;
   }>;
   keywordClusters: Array<{
-    name: string;
+    clusterName: string;
     keywords: string[];
   }>;
-  analysis: string;
+  competitionAnalysis: string;
+  recommendedStrategy: string;
 }
 
-// Interface for keyword competition analysis results
 export interface KeywordCompetitionResult {
-  difficulty: string;
-  topCompetitors: Array<{
-    domain: string;
-    strengths: string[];
-    weaknesses: string[];
-  }>;
-  contentGaps: string[];
-  keywordTargetingStrategy: string;
-  difficultyByKeyword: Array<{
-    keyword: string;
-    difficulty: 'low' | 'medium' | 'high';
-    reason: string;
-  }>;
-}
-
-// Interface for keyword trend analysis results
-export interface KeywordTrendResult {
-  trendDirection: 'growing' | 'stable' | 'declining';
-  seasonality: {
-    pattern: 'none' | 'monthly' | 'quarterly' | 'annual';
-    peakMonths: string[];
-    lowMonths: string[];
+  keywords: string[];
+  competitionAnalysis: {
+    overallDifficulty: string;
+    keywordDifficulties: Array<{
+      keyword: string;
+      difficulty: string;
+      explanation: string;
+    }>;
+    topCompetitors: Array<{
+      domain: string;
+      strengths: string;
+      weaknesses: string;
+    }>;
   };
-  emergingTerms: Array<{
-    term: string;
-    relevance: 'high' | 'medium' | 'low';
+  contentGaps: Array<{
+    topic: string;
+    opportunity: string;
+    suggestedAngle: string;
   }>;
-  recommendedTiming: string;
-  analysis: string;
+  keywordTargetingStrategy: string;
 }
 
-// Interface for comprehensive keyword analysis
-export interface KeywordAnalysisResult {
-  research: KeywordResearchResult;
-  competition?: KeywordCompetitionResult;
-  trends?: KeywordTrendResult;
+export interface KeywordTrendResult {
+  keyword: string;
+  trendAnalysis: {
+    growthDirection: string;
+    growthRate: string;
+    seasonality: {
+      hasSeasonal: boolean;
+      peakMonths: string[];
+      lowMonths: string[];
+    };
+  };
+  relatedEmergingTerms: Array<{
+    term: string;
+    growthRate: string;
+    relevance: string;
+  }>;
+  futurePotential: string;
+  recommendedAction: string;
 }
 
-/**
- * KeywordAnalyzer class for analyzing and researching keywords
- */
 export class KeywordAnalyzer {
-  private model: ChatOpenAI;
-
-  constructor() {
-    this.model = model;
-  }
-
   /**
-   * Research keywords related to a main keyword
+   * Research a keyword to get related keywords, content ideas, and clustering opportunities
    */
-  async researchKeywords(keyword: string, industry: string): Promise<KeywordResearchResult> {
+  async researchKeyword(mainKeyword: string, industry: string): Promise<KeywordResearchResult> {
     try {
-      const prompt = await keywordResearchPrompt.format({ keyword, industry });
-      const response = await this.model.invoke(prompt);
-      
-      // Parse the JSON response
-      let data;
-      try {
-        const jsonMatch = response.content.toString().match(/({[\s\S]*})/);
-        data = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-      } catch (e) {
-        console.error('Failed to parse keyword research response:', e);
-        throw new Error('Failed to parse AI response for keyword research');
-      }
-      
-      if (!data) {
-        throw new Error('Invalid response format from keyword research');
-      }
-      
-      return {
-        mainKeyword: data.mainKeyword || keyword,
-        relatedKeywords: data.relatedKeywords || [],
-        contentIdeas: data.contentIdeas || [],
-        keywordClusters: data.keywordClusters || [],
-        analysis: data.analysis || ''
-      };
-    } catch (error) {
-      console.error('Error researching keywords:', error);
-      throw error;
+      // Create research chain
+      const researchChain = RunnableSequence.from([
+        keywordResearchPrompt,
+        model,
+        new StringOutputParser(),
+        keywordResearchParser,
+      ]);
+
+      // Execute the chain
+      const result = await researchChain.invoke({
+        mainKeyword,
+        industry,
+      });
+
+      return result;
+    } catch (error: any) {
+      console.error("Error researching keyword:", error);
+      throw new Error(`Failed to research keyword: ${error.message}`);
     }
   }
 
   /**
-   * Analyze competition for a set of keywords
+   * Analyze competition for specified keywords
    */
   async analyzeCompetition(keywords: string[], industry: string): Promise<KeywordCompetitionResult> {
     try {
-      const prompt = await keywordCompetitionPrompt.format({ 
-        keywords: keywords.join(', '), 
-        industry 
+      // Create competition analysis chain
+      const competitionChain = RunnableSequence.from([
+        keywordCompetitionPrompt,
+        model,
+        new StringOutputParser(),
+        keywordCompetitionParser,
+      ]);
+
+      // Execute the chain
+      const result = await competitionChain.invoke({
+        keywords: Array.isArray(keywords) ? keywords.join(", ") : keywords,
+        industry,
       });
-      const response = await this.model.invoke(prompt);
-      
-      // Parse the JSON response
-      let data;
-      try {
-        const jsonMatch = response.content.toString().match(/({[\s\S]*})/);
-        data = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-      } catch (e) {
-        console.error('Failed to parse keyword competition response:', e);
-        throw new Error('Failed to parse AI response for keyword competition analysis');
-      }
-      
-      if (!data) {
-        throw new Error('Invalid response format from keyword competition analysis');
-      }
-      
-      return {
-        difficulty: data.difficulty || 'medium',
-        topCompetitors: data.topCompetitors || [],
-        contentGaps: data.contentGaps || [],
-        keywordTargetingStrategy: data.keywordTargetingStrategy || '',
-        difficultyByKeyword: data.difficultyByKeyword || []
-      };
-    } catch (error) {
-      console.error('Error analyzing keyword competition:', error);
-      throw error;
+
+      return result;
+    } catch (error: any) {
+      console.error("Error analyzing keyword competition:", error);
+      throw new Error(`Failed to analyze keyword competition: ${error.message}`);
     }
   }
 
@@ -261,74 +317,59 @@ export class KeywordAnalyzer {
    */
   async analyzeTrends(keyword: string, industry: string): Promise<KeywordTrendResult> {
     try {
-      const prompt = await keywordTrendPrompt.format({ keyword, industry });
-      const response = await this.model.invoke(prompt);
-      
-      // Parse the JSON response
-      let data;
-      try {
-        const jsonMatch = response.content.toString().match(/({[\s\S]*})/);
-        data = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-      } catch (e) {
-        console.error('Failed to parse keyword trend response:', e);
-        throw new Error('Failed to parse AI response for keyword trend analysis');
-      }
-      
-      if (!data) {
-        throw new Error('Invalid response format from keyword trend analysis');
-      }
-      
-      return {
-        trendDirection: data.trendDirection || 'stable',
-        seasonality: data.seasonality || {
-          pattern: 'none',
-          peakMonths: [],
-          lowMonths: []
-        },
-        emergingTerms: data.emergingTerms || [],
-        recommendedTiming: data.recommendedTiming || '',
-        analysis: data.analysis || ''
-      };
-    } catch (error) {
-      console.error('Error analyzing keyword trends:', error);
-      throw error;
+      // Create trend analysis chain
+      const trendChain = RunnableSequence.from([
+        keywordTrendPrompt,
+        model,
+        new StringOutputParser(),
+        keywordTrendParser,
+      ]);
+
+      // Execute the chain
+      const result = await trendChain.invoke({
+        keyword,
+        industry,
+      });
+
+      return result;
+    } catch (error: any) {
+      console.error("Error analyzing keyword trends:", error);
+      throw new Error(`Failed to analyze keyword trends: ${error.message}`);
     }
   }
 
   /**
-   * Get a comprehensive analysis for a keyword
+   * Get comprehensive keyword analysis including research, competition, and trends
    */
-  async getComprehensiveAnalysis(keyword: string, industry: string): Promise<KeywordAnalysisResult> {
+  async getComprehensiveAnalysis(keyword: string, industry: string): Promise<{
+    research: KeywordResearchResult;
+    competition: KeywordCompetitionResult;
+    trends: KeywordTrendResult;
+  }> {
     try {
-      // First get the research results
-      const research = await this.researchKeywords(keyword, industry);
+      // Run all analyses in parallel
+      const [research, trends] = await Promise.all([
+        this.researchKeyword(keyword, industry),
+        this.analyzeTrends(keyword, industry),
+      ]);
+
+      // Extract related keywords for competition analysis
+      const relatedKeywords = research.relatedKeywords.slice(0, 5).map(k => k.keyword);
       
-      // Get just the keyword strings from the related keywords
-      const relatedKeywordStrings = research.relatedKeywords.map(k => k.keyword);
-      
-      // Adding the main keyword to the list
-      const allKeywords = [keyword, ...relatedKeywordStrings.slice(0, 4)];
-      
-      // Analyze competition for the main keyword and top related keywords
-      const competition = await this.analyzeCompetition(allKeywords, industry);
-      
-      // Analyze trends for the main keyword
-      const trends = await this.analyzeTrends(keyword, industry);
-      
+      // Include main keyword in the competition analysis
+      const keywordsToAnalyze = [keyword, ...relatedKeywords];
+
+      // Run competition analysis with all keywords
+      const competition = await this.analyzeCompetition(keywordsToAnalyze, industry);
+
       return {
         research,
         competition,
-        trends
+        trends,
       };
     } catch (error: any) {
-      console.error('Error getting comprehensive keyword analysis:', error);
-      // Return just the research if other analyses fail
-      if (error.research) {
-        return {
-          research: error.research
-        };
-      }
-      throw error;
+      console.error("Error getting comprehensive keyword analysis:", error);
+      throw new Error(`Failed to get comprehensive keyword analysis: ${error.message}`);
     }
   }
 }

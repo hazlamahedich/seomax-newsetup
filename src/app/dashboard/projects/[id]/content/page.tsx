@@ -1,28 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@supabase/supabase-js';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, FileText, Link as LinkIcon, Search } from 'lucide-react';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
-
-// Import the content analyzer
-import { analyzeContentReadability, analyzeKeywordsInContent } from '@/lib/ai/content-analyzer';
+import { Loader2, FileText, CheckCircle, AlertTriangle, Globe } from 'lucide-react';
+import { ContentAnalyzer, ReadabilityAnalysis, KeywordAnalysis, ContentSuggestion } from '@/lib/ai/content-analyzer';
 
 // Create a Supabase client
 const supabase = createClient(
@@ -30,509 +17,299 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-interface Project {
-  id: string;
-  user_id: string;
-  website_name: string;
-  website_url: string;
-  target_keywords: string[];
-  competitors: string[];
-  created_at: string;
-}
-
 interface AnalysisResult {
-  readability?: {
+  readability: {
     score: number;
-    fleschKincaidLevel: string;
-    averageSentenceLength: number;
-    complexWordPercentage: number;
-    recommendations: string[];
+    grade: string;
+    analysis: string;
+    suggestions: string[];
   };
-  keywords?: {
-    mainKeyword: string;
-    density: number;
-    occurrences: number;
-    placement: string;
-    related: Array<{ keyword: string; occurrences: number; density: number }>;
-    recommendations: string[];
+  seo: {
+    score: number;
+    keywords: Array<{ keyword: string; count: number; density: string }>;
+    suggestions: string[];
   };
-  suggestions?: Array<{
+  suggestions: Array<{
     type: string;
     suggestion: string;
     priority: 'high' | 'medium' | 'low';
   }>;
-  error?: string;
 }
 
-export default function ContentAnalyzerPage({ params }: { params: { id: string } }) {
+export default function ContentPage({ params }: { params: { id: string } }) {
   const { user } = useAuth();
-  const router = useRouter();
-  const projectId = params.id;
-  
-  const [project, setProject] = useState<Project | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [error, setError] = useState('');
-  
-  const [analysisType, setAnalysisType] = useState<'url' | 'text'>('url');
   const [url, setUrl] = useState('');
-  const [content, setContent] = useState('');
-  const [targetKeyword, setTargetKeyword] = useState('');
-  
+  const [text, setText] = useState('');
+  const [activeTab, setActiveTab] = useState('url');
+  const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  
-  useEffect(() => {
-    if (user) {
-      fetchProject();
-    }
-  }, [user, projectId]);
-  
-  useEffect(() => {
-    if (project && project.target_keywords && project.target_keywords.length > 0) {
-      setTargetKeyword(project.target_keywords[0]);
-    }
-  }, [project]);
-  
-  const fetchProject = async () => {
+  const contentAnalyzer = new ContentAnalyzer();
+
+  const analyzeContent = async () => {
     if (!user) return;
     
     try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('id', projectId)
-        .eq('user_id', user.id)
-        .single();
-        
-      if (error) {
-        console.error('Error fetching project:', error);
-        router.push('/dashboard');
-      } else if (data) {
-        setProject(data);
-      }
-    } catch (err) {
-      console.error('Error fetching project:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const fetchUrlContent = async (url: string): Promise<string> => {
-    try {
-      const response = await fetch(`/api/fetch-content?url=${encodeURIComponent(url)}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch content: ${response.statusText}`);
-      }
-      const data = await response.json();
-      return data.content;
-    } catch (error) {
-      console.error('Error fetching URL content:', error);
-      throw error;
-    }
-  };
-  
-  const analyzeContent = async () => {
-    if (!targetKeyword) {
-      setError('Please select a target keyword for analysis');
-      return;
-    }
-    
-    try {
-      setError('');
       setAnalyzing(true);
-      setAnalysisResult(null);
       
       let contentToAnalyze = '';
+      let fetchedTitle = '';
       
-      if (analysisType === 'url') {
-        if (!url) {
-          setError('Please enter a valid URL');
-          setAnalyzing(false);
-          return;
+      // If URL analysis, fetch the content first
+      if (activeTab === 'url' && url) {
+        const response = await fetch(`/api/fetch-content?url=${encodeURIComponent(url)}`);
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error);
         }
         
-        try {
-          // In a real implementation, this would fetch content from the URL
-          // For now, we'll simulate this with a delay
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          contentToAnalyze = `This is simulated content for the URL ${url}. In a real implementation, this would be the actual content fetched from the URL. This content would then be analyzed for readability and keyword usage.
-          
-          The simulated content includes mentions of ${targetKeyword} several times to demonstrate keyword analysis. The ${targetKeyword} appears in headings and paragraphs.
-          
-          Some SEO best practices for ${targetKeyword} optimization include using the keyword in the title, headings, and naturally throughout the content. Avoid keyword stuffing as it can negatively impact readability and user experience.
-          
-          This is a longer paragraph to demonstrate readability analysis. It contains multiple sentences with varying lengths and complexity. Some sentences are short. Others are more complex and include multiple clauses, technical terms, or specialized vocabulary that might impact readability scores and make the content more difficult for the average reader to comprehend quickly.`;
-        } catch (error) {
-          setError('Failed to fetch content from URL');
-          setAnalyzing(false);
-          return;
-        }
+        contentToAnalyze = data.content;
+        fetchedTitle = data.title;
+      } else if (activeTab === 'text' && text) {
+        contentToAnalyze = text;
       } else {
-        if (!content) {
-          setError('Please enter content to analyze');
-          setAnalyzing(false);
-          return;
-        }
-        contentToAnalyze = content;
+        throw new Error('No content to analyze');
       }
       
-      // Perform readability analysis
-      const readabilityResult = await analyzeContentReadability(contentToAnalyze);
-      
-      // Perform keyword analysis
-      const keywordResult = await analyzeKeywordsInContent(contentToAnalyze, targetKeyword);
-      
-      setAnalysisResult({
-        readability: readabilityResult,
-        keywords: keywordResult,
-        suggestions: [
-          {
-            type: 'Readability',
-            suggestion: 'Shorten sentences to improve readability',
-            priority: 'medium'
-          },
-          {
-            type: 'Keyword Usage',
-            suggestion: `Add more instances of "${targetKeyword}" in the first paragraph`,
-            priority: 'high'
-          },
-          {
-            type: 'Content Structure',
-            suggestion: 'Add more subheadings to break up the content',
-            priority: 'low'
-          }
-        ]
+      // Analyze the content
+      const readabilityAnalysis = await contentAnalyzer.analyzeReadability(contentToAnalyze);
+      const keywordAnalysis = await contentAnalyzer.analyzeKeywordUsage(contentToAnalyze, []);
+      const contentSuggestions = await contentAnalyzer.generateSuggestions(contentToAnalyze, [], {
+        readability: readabilityAnalysis,
+        keyword: keywordAnalysis
       });
       
-    } catch (err) {
+      setAnalysisResult({
+        readability: {
+          score: readabilityAnalysis.readingLevel.score,
+          grade: readabilityAnalysis.readingLevel.value,
+          analysis: readabilityAnalysis.sentenceStructure.analysis,
+          suggestions: readabilityAnalysis.suggestions,
+        },
+        seo: {
+          score: keywordAnalysis.density.score,
+          keywords: keywordAnalysis.relatedTerms.terms.map(term => ({
+            keyword: term,
+            count: 1,
+            density: '0.5%'
+          })),
+          suggestions: keywordAnalysis.suggestedTerms,
+        },
+        suggestions: contentSuggestions.map(s => ({
+          type: s.title,
+          suggestion: s.description,
+          priority: s.priority,
+        })),
+      });
+      
+      // Save the analysis to the database
+      if (params.id) {
+        await supabase.from('content_analyses').insert({
+          project_id: params.id,
+          user_id: user.id,
+          content_type: activeTab === 'url' ? 'url' : 'text',
+          url: activeTab === 'url' ? url : null,
+          title: activeTab === 'url' ? fetchedTitle : 'Custom text analysis',
+          content: contentToAnalyze.substring(0, 500) + '...',
+          readability_score: readabilityAnalysis.readingLevel.score,
+          seo_score: keywordAnalysis.density.score,
+          created_at: new Date().toISOString(),
+        });
+      }
+    } catch (err: any) {
       console.error('Error analyzing content:', err);
-      setError('An error occurred during analysis');
+      alert(`Error analyzing content: ${err.message}`);
     } finally {
       setAnalyzing(false);
     }
   };
-  
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
-  
+
+  const getReadabilityColor = (score: number) => {
+    if (score >= 80) return 'text-green-500';
+    if (score >= 60) return 'text-amber-500';
+    return 'text-red-500';
+  };
+
+  const getSeoColor = (score: number) => {
+    if (score >= 80) return 'text-green-500';
+    if (score >= 60) return 'text-amber-500';
+    return 'text-red-500';
+  };
+
+  const renderPriorityIcon = (priority: 'high' | 'medium' | 'low') => {
+    switch (priority) {
+      case 'high':
+        return <AlertTriangle className="h-5 w-5 text-red-500" />;
+      case 'medium':
+        return <AlertTriangle className="h-5 w-5 text-amber-500" />;
+      case 'low':
+        return <CheckCircle className="h-5 w-5 text-green-500" />;
+    }
+  };
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Content Analyzer</h1>
-        <p className="text-muted-foreground">
-          Analyze content for SEO optimization and readability
-        </p>
-      </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Content Analysis</h1>
       
       <Card>
         <CardHeader>
-          <CardTitle>Analyze Your Content</CardTitle>
+          <CardTitle>Analyze Content</CardTitle>
           <CardDescription>
-            Enter a URL or paste content directly to analyze
+            Enter a URL or paste text to analyze content for readability and SEO
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <Tabs 
-            value={analysisType} 
-            onValueChange={(value) => setAnalysisType(value as 'url' | 'text')}
-            className="space-y-4"
-          >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="url">
-                <LinkIcon className="mr-2 h-4 w-4" />
-                URL
-              </TabsTrigger>
-              <TabsTrigger value="text">
-                <FileText className="mr-2 h-4 w-4" />
-                Text Content
-              </TabsTrigger>
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="url">URL</TabsTrigger>
+              <TabsTrigger value="text">Text</TabsTrigger>
             </TabsList>
             
             <TabsContent value="url" className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="url">Page URL</Label>
-                <Input
-                  id="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://example.com/page-to-analyze"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Enter the full URL of the page you want to analyze
-                </p>
+              <div className="flex space-x-2">
+                <div className="flex-1">
+                  <Input
+                    placeholder="https://example.com/page"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                  />
+                </div>
+                <Button onClick={analyzeContent} disabled={!url || analyzing}>
+                  {analyzing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="mr-2 h-4 w-4" />
+                      Analyze URL
+                    </>
+                  )}
+                </Button>
               </div>
             </TabsContent>
             
             <TabsContent value="text" className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="content">Content</Label>
-                <Textarea
-                  id="content"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Paste your content here for analysis..."
-                  className="min-h-[200px]"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Paste the content you want to analyze for SEO and readability
-                </p>
-              </div>
+              <Textarea
+                placeholder="Paste your content here..."
+                className="min-h-[200px]"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+              <Button onClick={analyzeContent} disabled={!text || analyzing}>
+                {analyzing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Analyze Text
+                  </>
+                )}
+              </Button>
             </TabsContent>
           </Tabs>
-          
-          <div className="space-y-2">
-            <Label htmlFor="targetKeyword">Target Keyword</Label>
-            <Select 
-              value={targetKeyword} 
-              onValueChange={setTargetKeyword}
-            >
-              <SelectTrigger id="targetKeyword">
-                <SelectValue placeholder="Select a target keyword" />
-              </SelectTrigger>
-              <SelectContent>
-                {project?.target_keywords?.map((keyword, index) => (
-                  <SelectItem key={index} value={keyword}>
-                    {keyword}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-sm text-muted-foreground">
-              Select the primary keyword you want to optimize for
-            </p>
-          </div>
-          
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          
-          <Button 
-            onClick={analyzeContent} 
-            disabled={analyzing}
-            className="w-full"
-          >
-            {analyzing ? (
-              <>
-                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <Search className="mr-2 h-4 w-4" />
-                Analyze Content
-              </>
-            )}
-          </Button>
         </CardContent>
       </Card>
       
-      {analyzing && (
+      {analysisResult && (
         <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-medium">Readability Score</CardTitle>
+                <CardDescription>Based on ease of reading and comprehension</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className={`text-4xl font-bold ${getReadabilityColor(analysisResult.readability.score)}`}>
+                  {analysisResult.readability.score}/100
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Grade Level: {analysisResult.readability.grade}
+                </p>
+                <p className="mt-4 text-sm">{analysisResult.readability.analysis}</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-medium">SEO Score</CardTitle>
+                <CardDescription>Based on keyword usage and content structure</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className={`text-4xl font-bold ${getSeoColor(analysisResult.seo.score)}`}>
+                  {analysisResult.seo.score}/100
+                </div>
+                <div className="mt-4 space-y-2">
+                  <p className="text-sm font-medium">Top Keywords:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {analysisResult.seo.keywords.slice(0, 5).map((kw, index) => (
+                      <div key={index} className="bg-muted px-2 py-1 rounded-md text-xs">
+                        {kw.keyword} ({kw.density})
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
           <Card>
             <CardHeader>
-              <Skeleton className="h-6 w-1/3" />
-              <Skeleton className="h-4 w-1/2" />
+              <CardTitle>Content Improvement Suggestions</CardTitle>
+              <CardDescription>
+                Tips to improve your content for better readability and SEO performance
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
+            <CardContent>
+              <div className="space-y-4">
+                {analysisResult.suggestions.map((suggestion, index) => (
+                  <div key={index} className="flex gap-3 pb-3 border-b last:border-0 last:pb-0">
+                    {renderPriorityIcon(suggestion.priority)}
+                    <div>
+                      <p className="font-medium">{suggestion.type}</p>
+                      <p className="text-sm text-muted-foreground">{suggestion.suggestion}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
-        </div>
-      )}
-      
-      {!analyzing && analysisResult && (
-        <div className="space-y-6">
-          <Tabs defaultValue="readability" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="readability">Readability</TabsTrigger>
-              <TabsTrigger value="keywords">Keywords</TabsTrigger>
-              <TabsTrigger value="suggestions">Suggestions</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="readability" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Readability Analysis</CardTitle>
-                  <CardDescription>
-                    How easy is your content to read and understand
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-medium">Readability Score</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Based on Flesch-Kincaid readability tests
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold">
-                        {analysisResult.readability?.score || 0}/100
-                      </div>
-                      <p className="text-sm font-medium text-muted-foreground">
-                        {analysisResult.readability?.fleschKincaidLevel || 'N/A'}
-                      </p>
-                    </div>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle>Readability Suggestions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {analysisResult.readability.suggestions.map((suggestion, index) => (
+                  <div key={index} className="flex items-start gap-2 pb-2">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                    <p className="text-sm">{suggestion}</p>
                   </div>
-                  
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="rounded-lg border p-4">
-                      <div className="text-sm font-medium text-muted-foreground">
-                        Average Sentence Length
-                      </div>
-                      <div className="mt-1 text-2xl font-semibold">
-                        {analysisResult.readability?.averageSentenceLength || 0} words
-                      </div>
-                    </div>
-                    <div className="rounded-lg border p-4">
-                      <div className="text-sm font-medium text-muted-foreground">
-                        Complex Word Usage
-                      </div>
-                      <div className="mt-1 text-2xl font-semibold">
-                        {analysisResult.readability?.complexWordPercentage || 0}%
-                      </div>
-                    </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle>SEO Suggestions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {analysisResult.seo.suggestions.map((suggestion, index) => (
+                  <div key={index} className="flex items-start gap-2 pb-2">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                    <p className="text-sm">{suggestion}</p>
                   </div>
-                  
-                  <div>
-                    <h3 className="mb-3 text-lg font-medium">Recommendations</h3>
-                    {analysisResult.readability?.recommendations.map((recommendation, index) => (
-                      <div key={index} className="mb-2 flex items-start space-x-2">
-                        <div className="mt-1 h-1.5 w-1.5 rounded-full bg-primary"></div>
-                        <p>{recommendation}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-            
-            <TabsContent value="keywords" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Keyword Analysis</CardTitle>
-                  <CardDescription>
-                    How well your content is optimized for your target keyword
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-medium">Main Keyword</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {analysisResult.keywords?.mainKeyword || targetKeyword}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold">
-                        {analysisResult.keywords?.density || 0}%
-                      </div>
-                      <p className="text-sm font-medium text-muted-foreground">
-                        Density
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="rounded-lg border p-4">
-                      <div className="text-sm font-medium text-muted-foreground">
-                        Occurrences
-                      </div>
-                      <div className="mt-1 text-2xl font-semibold">
-                        {analysisResult.keywords?.occurrences || 0} times
-                      </div>
-                    </div>
-                    <div className="rounded-lg border p-4">
-                      <div className="text-sm font-medium text-muted-foreground">
-                        Placement
-                      </div>
-                      <div className="mt-1 text-xl font-semibold">
-                        {analysisResult.keywords?.placement || 'Not found in key elements'}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="mb-3 text-lg font-medium">Related Keywords</h3>
-                    <div className="space-y-3">
-                      {analysisResult.keywords?.related.map((item, index) => (
-                        <div key={index} className="flex items-center justify-between">
-                          <div className="font-medium">{item.keyword}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {item.occurrences} times ({item.density}%)
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="mb-3 text-lg font-medium">Recommendations</h3>
-                    {analysisResult.keywords?.recommendations.map((recommendation, index) => (
-                      <div key={index} className="mb-2 flex items-start space-x-2">
-                        <div className="mt-1 h-1.5 w-1.5 rounded-full bg-primary"></div>
-                        <p>{recommendation}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-            
-            <TabsContent value="suggestions" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Content Suggestions</CardTitle>
-                  <CardDescription>
-                    Actionable recommendations to improve your content
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {['high', 'medium', 'low'].map((priority) => {
-                    const prioritySuggestions = analysisResult.suggestions?.filter(
-                      (s) => s.priority === priority
-                    ) || [];
-                    
-                    if (prioritySuggestions.length === 0) return null;
-                    
-                    return (
-                      <div key={priority} className="space-y-3">
-                        <h3 className="font-medium">
-                          {priority === 'high' 
-                            ? '🔴 High Priority' 
-                            : priority === 'medium' 
-                              ? '🟠 Medium Priority' 
-                              : '🟢 Low Priority'}
-                        </h3>
-                        {prioritySuggestions.map((suggestion, index) => (
-                          <div key={index} className="rounded-lg border p-4">
-                            <div className="font-medium text-sm text-muted-foreground mb-1">
-                              {suggestion.type}
-                            </div>
-                            <div>
-                              {suggestion.suggestion}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>

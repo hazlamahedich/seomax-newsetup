@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle, BookOpen, Check, Cpu, Edit, FileText, ListChecks } from 'lucide-react';
 import { ContentPageService, ContentAnalysisService, ContentSuggestionService } from '@/lib/services/content-service';
 import { ContentPage, ContentAnalysis, ContentSuggestion } from '@/lib/types/database.types';
-import { useToast } from '@/components/ui/toast';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ContentEditorProps {
   projectId: string;

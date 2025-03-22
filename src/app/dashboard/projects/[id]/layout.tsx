@@ -3,11 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@supabase/supabase-js';
-import { BarChart, FileText, Globe, Home, LayoutDashboard, Search, Settings, ArrowLeft, LineChart } from 'lucide-react';
-import { ReactNode } from 'react';
+import { ChevronLeft, BarChart2, Keyboard, FileText, Settings, Code } from 'lucide-react';
 
 // Create a Supabase client
 const supabase = createClient(
@@ -23,7 +21,7 @@ interface Project {
 }
 
 interface ProjectLayoutProps {
-  children: ReactNode;
+  children: React.ReactNode;
   params: {
     id: string;
   };
@@ -71,11 +69,9 @@ export default function ProjectLayout({ children, params }: ProjectLayoutProps) 
     }
   };
 
+  // Function to determine if a link is active
   const isActive = (path: string) => {
-    if (path === '/dashboard/projects/' + projectId) {
-      return pathname === path;
-    }
-    return pathname.startsWith(path);
+    return pathname === `/dashboard/projects/${params.id}${path}`;
   };
 
   if (authLoading || loading) {
@@ -90,69 +86,99 @@ export default function ProjectLayout({ children, params }: ProjectLayoutProps) 
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-30 border-b bg-background">
-        <div className="container flex h-14 items-center">
-          <Link
-            href="/dashboard"
-            className="flex items-center mr-6 text-sm font-medium transition-colors hover:text-primary"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
-          </Link>
+    <div className="flex flex-col min-h-screen">
+      <header className="border-b">
+        <div className="container py-4">
+          <div className="flex items-center mb-4">
+            <Link 
+              href="/dashboard" 
+              className="flex items-center text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Back to Dashboard
+            </Link>
+            {project && (
+              <h1 className="ml-4 font-medium">{project.website_name}</h1>
+            )}
+          </div>
           
-          <nav className="flex items-center space-x-4 lg:space-x-6 mx-6">
+          <nav className="flex space-x-1">
             <Link
-              href={`/dashboard/projects/${projectId}`}
-              className={`flex items-center text-sm font-medium transition-colors hover:text-primary ${
-                isActive(`/dashboard/projects/${projectId}`) && !isActive(`/dashboard/projects/${projectId}/keywords`) && !isActive(`/dashboard/projects/${projectId}/content`) && !isActive(`/dashboard/projects/${projectId}/settings`)
-                  ? 'text-primary'
-                  : 'text-muted-foreground'
+              href={`/dashboard/projects/${params.id}`}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActive("")
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
               }`}
             >
-              <Home className="h-4 w-4 mr-2" />
-              Overview
+              <div className="flex items-center space-x-2">
+                <BarChart2 className="h-4 w-4" />
+                <span>Overview</span>
+              </div>
             </Link>
+            
             <Link
-              href={`/dashboard/projects/${projectId}/keywords`}
-              className={`flex items-center text-sm font-medium transition-colors hover:text-primary ${
-                isActive(`/dashboard/projects/${projectId}/keywords`)
-                  ? 'text-primary'
-                  : 'text-muted-foreground'
+              href={`/dashboard/projects/${params.id}/keywords`}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActive("/keywords")
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
               }`}
             >
-              <Search className="h-4 w-4 mr-2" />
-              Keywords
+              <div className="flex items-center space-x-2">
+                <Keyboard className="h-4 w-4" />
+                <span>Keywords</span>
+              </div>
             </Link>
+            
             <Link
-              href={`/dashboard/projects/${projectId}/content`}
-              className={`flex items-center text-sm font-medium transition-colors hover:text-primary ${
-                isActive(`/dashboard/projects/${projectId}/content`)
-                  ? 'text-primary'
-                  : 'text-muted-foreground'
+              href={`/dashboard/projects/${params.id}/content`}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActive("/content")
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
               }`}
             >
-              <FileText className="h-4 w-4 mr-2" />
-              Content
+              <div className="flex items-center space-x-2">
+                <FileText className="h-4 w-4" />
+                <span>Content</span>
+              </div>
             </Link>
+            
             <Link
-              href={`/dashboard/projects/${projectId}/settings`}
-              className={`flex items-center text-sm font-medium transition-colors hover:text-primary ${
-                isActive(`/dashboard/projects/${projectId}/settings`)
-                  ? 'text-primary'
-                  : 'text-muted-foreground'
+              href={`/dashboard/projects/${params.id}/technical-seo`}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActive("/technical-seo")
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
               }`}
             >
-              <Settings className="h-4 w-4 mr-2" />
-              Settings
+              <div className="flex items-center space-x-2">
+                <Code className="h-4 w-4" />
+                <span>Technical SEO</span>
+              </div>
+            </Link>
+            
+            <Link
+              href={`/dashboard/projects/${params.id}/settings`}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActive("/settings")
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <Settings className="h-4 w-4" />
+                <span>Settings</span>
+              </div>
             </Link>
           </nav>
         </div>
       </header>
       
-      <main className="flex-1 container py-6">
+      <div className="flex-1 container py-6">
         {children}
-      </main>
+      </div>
     </div>
   );
 } 

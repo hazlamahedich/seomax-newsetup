@@ -13,21 +13,26 @@ SEOMax follows a modern web application architecture with these key components:
    - Primarily server components with dynamic rendering
    - React server actions for form submissions
    - Local client component state for UI-specific interactions
+   - Zustand for global state management across components
 
 3. **Data Layer**:
    - Supabase PostgreSQL for structured data storage
    - Supabase Auth for user authentication
    - Service classes for data operations
+   - React Query for efficient data fetching and caching
 
 4. **AI Integration**:
-   - LangChain.js for structured AI workflows (planned)
-   - LangGraph.js for complex, multi-step AI processes (planned)
-   - Server-side AI processing with client-side results display
+   - LangChain for structured AI workflows and prompt management
+   - ChatOpenAI integration for keyword and content analysis
+   - Custom prompt templates for specific analysis types
+   - Structured output formats for consistent AI responses
+   - Error handling for AI service calls
 
 5. **Performance Optimization**:
    - Dynamic rendering for data-dependent pages
    - Efficient SQL queries with proper relations
    - Separation of concerns for maintainability
+   - Custom type declarations for third-party libraries
 
 ## Key Technical Decisions
 
@@ -39,20 +44,21 @@ SEOMax follows a modern web application architecture with these key components:
 
 2. **Database Schema Design**:
    - Normalized schema with efficient relationships
-   - Content-centric tables structure (pages, analysis, suggestions)
-   - Project-based organization of data
+   - Project-centric organization with keywords, rankings, and content
+   - User-based data segregation
    - Implementing row-level security for multi-tenant data
 
 3. **Authentication Flow**:
    - Email/password login via Supabase
    - Session validation on protected routes
    - Redirect to login for unauthenticated users
+   - Custom hook (useAuth) for authentication state
 
-4. **Content Management Architecture**:
-   - Separation of content pages and analysis data
-   - Independent competitor content analysis
-   - Service classes for data operations
-   - Content metrics and visualization components
+4. **AI Analysis Architecture**:
+   - Modular AI services for different analysis types
+   - Structured prompt engineering for consistent results
+   - JSON parsing of AI responses for structured data
+   - Separation of research, analysis, and suggestion generation
 
 ## Design Patterns in Use
 
@@ -62,53 +68,58 @@ SEOMax follows a modern web application architecture with these key components:
    - Card-based content display for consistency
 
 2. **Service Pattern**:
-   - Dedicated service classes for data operations
+   - Dedicated service classes for data operations (ProjectService, KeywordService)
+   - AI service classes with structured methods (KeywordAnalyzer, ContentAnalyzer)
    - Static methods for server component compatibility
    - Proper error handling and logging
    - Centralized data access logic
 
 3. **Page Layout Pattern**:
-   - Consistent layout with breadcrumb navigation
+   - Consistent layout with navigation links
    - Tab navigation for section switching
-   - Reusable page structures across features
+   - Project-centric navigation with ID-based routing
+   - Conditional rendering based on data state (loading, empty, error)
 
 4. **Data Display Patterns**:
-   - Card-based item listing
-   - Detail views with metrics and visualization
-   - Empty state handling with user guidance
-   - Loading and error states
+   - Card-based metric display for dashboard
+   - Interactive keyword list with selection state
+   - Tabbed content display for analysis results
+   - Loading and error states with appropriate feedback
 
 5. **Form Handling Pattern**:
-   - Server actions for form submission
-   - Client-side validation
-   - Redirect after successful operations
+   - Controlled components for form inputs
+   - Async form submission with loading state
+   - Error handling and validation
    - Consistent form layout and button placement
 
 ## Component Relationships
 
 1. **Authentication Flow**:
-   - AuthProvider → Login/Signup Forms → Project Dashboard
+   - AuthProvider → Login/Signup Forms → Dashboard
 
-2. **Project Management**:
+2. **Project Management Flow**:
    - Dashboard → Project List → Project Detail
+   - Project Detail → Project Settings → Edit Project Form
+   - New Project Page → Project Form → Project Service
 
-3. **Content Management Flow**:
-   - ContentLayout → TabNavigation → ContentPages/Briefs/Competitors
-   - ContentPagesPage → ContentDetail → ContentAnalysis
-   - CompetitorAnalysisPage → CompetitorDetail → CompetitorAnalysis
+3. **Keyword Research Flow**:
+   - Project Detail → Keywords Page → Keyword List
+   - Keywords Page → Selected Keyword → Keyword Analysis
+   - Keyword Analysis → Research/Competition/Trends Tabs → Analysis Display
+   - Add Keyword Form → Keywords Service → Keyword List Update
 
-4. **Backlink Analysis Flow**:
-   - BacklinksLayout → TabNavigation → Overview/Analysis/Competitors/Reports
-   - BacklinksPage → BacklinkMetrics → BacklinkTable
-   - BacklinkAnalysisPage → Charts → DetailedBacklinkTable
-   - AddBacklinkPage → AddBacklinkForm → BacklinkService
+4. **Content Analysis Flow**:
+   - Project Detail → Content Page → Content List
+   - Content Page → Content Detail → Content Analysis
+   - Content Analysis → Readability/Keywords/Structure Tabs → Suggestions
 
 5. **Service Architecture**:
-   - ContentPageService → Database Operations → UI Components
-   - CompetitorService → Database Operations → UI Components
-   - BacklinkService → Database Operations → UI Components
-   - Analysis Services → Data Processing → Visualization Components
+   - ProjectService → Database Operations → UI Components
+   - KeywordService → Database Operations → UI Components
+   - KeywordAnalyzer → AI Operations → Analysis Display
+   - ContentAnalyzer → AI Operations → Analysis Display
 
 6. **Navigation Structure**:
-   - Breadcrumb → Section Tabs → Content Area
-   - Content Listing → Content Detail → Analysis 
+   - Dashboard → Project List → Project Detail
+   - Project Detail → Tab Navigation (Overview, Keywords, Content, Settings)
+   - Tab Content → Feature-specific Components 

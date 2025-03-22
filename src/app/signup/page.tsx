@@ -4,15 +4,11 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from '@supabase/supabase-js';
-
-// Create a Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+import { useAuth } from "@/hooks/useAuth";
+import { signUp as supabaseSignUp } from "@/lib/auth/auth-service";
 
 export default function SignupPage() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -20,6 +16,7 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const router = useRouter();
+  const { signIn } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,16 +42,14 @@ export default function SignupPage() {
       setError('');
       setMessage('');
 
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
+      const result = await supabaseSignUp(email, password, name);
 
-      if (error) {
-        setError(error.message);
+      if (!result.success) {
+        setError(result.error || 'Sign up failed');
       } else {
         setMessage('Registration successful! Please check your email to confirm your account.');
         // Clear form
+        setName('');
         setEmail('');
         setPassword('');
         setConfirmPassword('');
@@ -98,6 +93,20 @@ export default function SignupPage() {
             )}
             
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="name" className="text-sm font-medium">
+                  Name (optional)
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  placeholder="Your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full p-2 border rounded-md"
+                />
+              </div>
+              
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm font-medium">
                   Email

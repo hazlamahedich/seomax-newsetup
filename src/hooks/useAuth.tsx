@@ -1,81 +1,74 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
-import { createClient, User } from '@supabase/supabase-js';
+import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react';
+import { signIn as supabaseSignIn, signOut as supabaseSignOut, signUp as supabaseSignUp } from '../lib/auth/auth-service';
 
-// Create a Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
-
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signOut: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Get initial user
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      setLoading(false);
-    };
-
-    getUser();
-
-    // Set up auth state listener
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setUser(session?.user || null);
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
+export function useAuth() {
+  const { data: session, status } = useSession();
+  const loading = status === 'loading';
+  
+  const user = session?.user ?? null;
+  
+  /**
+   * Sign in with email and password
+   */
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      // First sign in with Supabase
+      const result = await supabaseSignIn(email, password);
+      
+      if (!result.success) {
+        return { error: new Error(result.error || 'Sign in failed') };
+      }
+      
+      // Then sign in with NextAuth
+      const nextAuthResult = await nextAuthSignIn('credentials', {
         email,
         password,
+        redirect: false,
       });
-
-      return { error };
+      
+      if (nextAuthResult?.error) {
+        return { error: new Error(nextAuthResult.error) };
+      }
+      
+      return { error: null };
     } catch (error) {
       return { error: error as Error };
     }
   };
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
+  
+  /**
+   * Sign up with email and password
+   */
+  const signUp = async (email: string, password: string, name?: string) => {
+    try {
+      const result = await supabaseSignUp(email, password, name);
+      
+      if (!result.success) {
+        return { error: new Error(result.error || 'Sign up failed') };
+      }
+      
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
-
-  const value = {
+  
+  /**
+   * Sign out the user
+   */
+  const signOut = async () => {
+    // Sign out from Supabase
+    await supabaseSignOut();
+    
+    // Sign out from NextAuth
+    await nextAuthSignOut();
+  };
+  
+  return {
     user,
     loading,
     signIn,
+    signUp,
     signOut,
   };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  
-  return context;
 } 
