@@ -178,9 +178,14 @@ export default function DashboardPage() {
             variants={fadeIn}
           >
             <h1 className="text-3xl font-bold">Dashboard</h1>
-            <Button asChild>
-              <Link href="/dashboard/new-project">Add Website</Link>
-            </Button>
+            <div className="flex gap-3">
+              <Button variant="outline" asChild>
+                <Link href="/dashboard/about-enhanced">Try Enhanced Dashboard</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/dashboard/new-project">Add Website</Link>
+              </Button>
+            </div>
           </motion.div>
           
           {projects.length === 0 ? (
