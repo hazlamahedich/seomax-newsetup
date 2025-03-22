@@ -1,5 +1,97 @@
 # Technical Context
 
+## Technologies Used
+
+### Frontend
+- **React 19**: UI library
+- **Next.js 15** (App Router): Framework for server-rendered React applications
+- **TypeScript**: Type-safe JavaScript
+- **Tailwind CSS**: Utility-first CSS framework
+- **shadcn/ui**: Unstyled UI components built on Radix UI
+- **Zustand**: Lightweight state management
+- **Tanstack React Query**: Data fetching and caching
+- **Framer Motion**: Animations
+- **Recharts/D3**: Data visualization
+
+### Backend
+- **Next.js API Routes**: Backend API endpoints
+- **Supabase**: Database, authentication, and storage
+- **LangChain**: Framework for developing AI-powered applications
+- **GPT Models**: Content analysis and recommendations
+
+### Testing
+- **Jest**: Unit and integration testing
+- **React Testing Library**: Component testing
+- **Playwright**: End-to-end testing
+  - Used for browser automation and user journey validation
+  - Support for multiple browsers (Chromium, Firefox, WebKit)
+  - Visual testing capabilities
+  - Authentication testing
+
+## Development Setup
+
+### Environment Requirements
+- Node.js 18+
+- npm/yarn
+- Supabase account for database
+- OpenAI API key for AI features
+
+### Environment Variables
+- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anonymous key
+- `OPENAI_API_KEY`: OpenAI API key
+- `NEXT_PUBLIC_APP_URL`: Base URL of the application
+
+### Local Development
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Start the development server: `npm run dev`
+4. Run tests: `npm test`
+5. Run E2E tests: `npm run test:e2e`
+
+## Technical Constraints
+
+### Performance
+- Optimizing AI request latency for content analysis
+- Managing state rehydration for large datasets
+- Limiting bundle size for fast initial load
+
+### Security
+- Protected API routes with authentication
+- Rate limiting for public endpoints
+- Secure handling of API keys
+
+### Scalability
+- Optimizing database queries for large datasets
+- Chunking large content for analysis
+- Efficient storage of historical data
+
+## Dependencies
+
+### Core Dependencies
+- React and Next.js ecosystem
+- Supabase JS client
+- LangChain for AI integration
+
+### Development Dependencies
+- TypeScript
+- ESLint and Prettier
+- Jest and React Testing Library
+- Playwright for E2E testing
+- Storybook (planned)
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflows
+- Build validation
+- Unit and integration tests
+- End-to-end tests
+- Linting and type checking
+
+### Deployment
+- Vercel for frontend deployment
+- Supabase for backend services
+
 ## Core Technologies
 
 ### Frontend Framework
