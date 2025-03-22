@@ -1,115 +1,154 @@
-# Technical Context: SEOMax Development
+# Technical Context
 
-## Technologies Used
+## Core Technologies
 
-### Framework & Frontend
-- **Next.js 15+**: Using App Router for improved rendering and routing
-- **React 19**: UI library for component-based architecture
-- **TypeScript**: For type-safe code and improved developer experience
-- **Tailwind CSS**: For utility-first styling
-- **shadcn/ui**: Component library built on Radix UI with Tailwind styling
+### Frontend Framework
+- **Next.js**: v15+ with App Router architecture
+- **React**: Core UI library with server and client components
+- **TypeScript**: For type-safe code development
+
+### Styling
+- **Tailwind CSS**: Utility-first CSS framework
+- **shadcn/ui**: Component library built on Radix UI
 - **Framer Motion**: For animations and transitions
-- **React Hook Form**: Form handling and validation
-- **Zod**: Schema validation for forms and API data
 
 ### State Management
-- **Zustand**: Lightweight state management
-- **React Query**: For server state management and data fetching
-- **Context API**: For specific shared state (auth, themes)
+- **React Query (TanStack Query)**: For server state management, data fetching, and caching
+- **Zustand**: For client-side state management
+- **React Context**: For theme and authentication state
 
-### Backend & Data
-- **Supabase**: Backend-as-a-service platform
-  - **Authentication**: Email/password login
-  - **PostgreSQL Database**: For data storage
-  - **Row Level Security**: For data protection
-- **Server Components**: For data-fetching and rendering
-- **Server Actions**: For form submissions and mutations
-- **Service Classes**: For encapsulated data operations
-
-### Data Visualization
-- **Recharts**: For creating interactive charts and graphs
-- **Card-based metrics**: For displaying key performance indicators
+### Database & Backend
+- **Supabase**: PostgreSQL database with authentication services
+- **Next-Auth**: For authentication with Supabase as credentials provider
+- **PostgreSQL**: Relational database through Supabase
 
 ### AI Integration
-- **LangChain**: Framework for LLM application development
-- **ChatOpenAI**: For interfacing with OpenAI's models
-- **Custom Prompt Templates**: For structured AI interactions
-- **Structured Output Parsing**: For consistent JSON responses
-- **Custom Type Declarations**: For TypeScript compatibility
+- **LangChain**: For structured AI prompt workflows
+- **OpenAI**: GPT-4 model access through LangChain
+- **Structured Output Parsing**: For consistent AI response handling
+
+### Data Visualization
+- **Recharts**: For performance graphs and analytics
+- **D3.js**: For topic cluster visualization
+- **react-flow**: For node-based relationship mapping
+
+### Testing
+- **Jest**: Testing framework
+- **React Testing Library**: For component testing
+- **Mock Service Worker**: For API mocking in tests
 
 ## Development Setup
 
+### Environment Requirements
+- Node.js v18+ (preferably v20+)
+- npm or yarn package manager
+- Git for version control
+- OpenAI API key for AI services
+- Supabase project with configured tables
+
 ### Environment Variables
 ```
-NEXT_PUBLIC_SUPABASE_URL=<your-supabase-url>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
-OPENAI_API_KEY=<your-openai-api-key>
+# Next.js
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+
+# Authentication
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your-nextauth-secret
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+
+# OpenAI
+OPENAI_API_KEY=your-openai-api-key
 ```
 
 ### Local Development
-- Node.js 18+ recommended
-- npm or yarn for package management
-- VS Code with extensions:
-  - ESLint
-  - Prettier
-  - Tailwind CSS IntelliSense
-  - TypeScript Hero
+1. Clone repository
+2. Install dependencies: `npm install`
+3. Set up environment variables in `.env.local`
+4. Run development server: `npm run dev`
+5. Access application at `http://localhost:3000`
+
+### Database Schema
+Key tables in Supabase:
+- **users**: User profiles
+- **projects**: SEO projects
+- **keywords**: Keyword research data
+- **content_pages**: Content pieces being analyzed
+- **content_analysis**: Analysis results for content
+- **content_suggestions**: SEO suggestions for content
 
 ## Technical Constraints
 
-### Supabase Integration
-- Authentication tied to Supabase Auth
-- Database operations via Supabase client
-- Row Level Security for multi-tenant isolation
-
-### Next.js Limitations
-- Mixing client and server components requires careful organization
-- Some third-party libraries need adaptation for React Server Components
-
-### LangChain Limitations
-- Need custom type declarations for some LangChain modules
-- Some modules like text splitters may not be available in the npm registry
-- Potential differences between documentation and actual package exports
+### AI Service Limitations
+- **Rate Limits**: OpenAI API has token and request limits
+- **Response Time**: AI analysis can take 5-30 seconds depending on content length
+- **Token Costs**: Longer content analysis has higher token costs
+- **Consistency**: AI response quality may vary despite structured prompts
 
 ### Performance Considerations
-- Heavy AI operations performed server-side to avoid client-side latency
-- Server components for initial rendering when possible
-- Strategic use of client components for interactivity
-- AI requests optimized to minimize token usage
+- **Hydration**: Next.js hydration can be affected by browser extensions
+  - Resolved with `suppressHydrationWarning` on html/body elements
+- **API Timeouts**: Supabase and OpenAI requests may timeout
+  - Implement timeout handling and graceful degradation
+- **Bundle Size**: Monitor client bundle size with large dependencies
+- **Content Size**: Large content pieces may affect analysis performance
 
-## Dependencies
+### Browser Compatibility
+- Targets modern browsers (Chrome, Firefox, Safari, Edge)
+- Minimal compatibility with IE11 (not actively supported)
 
-### Core Dependencies
-- next: 15.2.3
-- react: ^19.0.0
-- react-dom: ^19.0.0
-- typescript: ^5
-- tailwindcss: ^4
-- postcss: ^4
-- @radix-ui/* (various UI primitives)
-- class-variance-authority: ^0.7.1
-- clsx: ^2.1.1
-- lucide-react: ^0.483.0 (icons)
+### Deployment Requirements
+- Node.js hosting environment
+- Environment variables for API keys and secrets
+- Database connection to Supabase
+- Memory allocation for AI service calls
 
-### State Management
-- zustand
-- @tanstack/react-query: ^5.69.0
+## Architectural Decisions
 
-### Form Handling
-- react-hook-form: ^7.54.2
-- @hookform/resolvers: ^4.1.3
-- zod: ^3.24.2
+### Server Components vs. Client Components
+- Server Components for data fetching and initial rendering
+- Client Components for interactive elements
+- "use client" directive clearly marks client components
 
-### Data Fetching
-- @supabase/supabase-js: ^2.49.1
+### Error Handling Strategy
+- Try/catch blocks around all data fetching operations
+- Fallback UI components for error states
+- Structured error messages for user guidance
+- Error logging for debugging and monitoring
 
-### AI and Content Analysis
-- langchain: ^0.3.19
-- jsdom: ^26.0.0
-- @mozilla/readability: ^0.6.0
+### Authentication Flow
+- Next-Auth with Supabase Credentials provider
+- Protected routes via middleware
+- Session persistence with cookies
+- Automatic redirection for unauthenticated users
 
-### Animation and UI
-- framer-motion: ^12.5.0
-- recharts: ^2.12.2
-- tailwind-merge: ^3.0.2
-- next-themes: ^0.4.6 
+### Content Analysis Pipeline
+- Content submission → Initial analysis → Competitor comparison → Suggestions
+- Background processing for long-running tasks
+- Persistent storage of analysis results
+- Incremental updates for content changes
+
+## Known Issues and Workarounds
+
+1. **React Hydration Errors**
+   - **Issue**: Browser extensions like Grammarly modify DOM, causing hydration mismatches
+   - **Solution**: Added `suppressHydrationWarning` to html and body elements
+
+2. **Session Fetch Errors**
+   - **Issue**: "Unexpected end of JSON input" errors during session fetching
+   - **Solution**: Implemented fallback session data and timeout handling
+
+3. **Supabase Client Export**
+   - **Issue**: Missing `createClient` export in Supabase client file
+   - **Solution**: Added proper export of `createClient` function
+
+4. **TypeScript-LangChain Integration**
+   - **Issue**: Type definitions for custom LangChain outputs
+   - **Solution**: Created custom type declarations for structured outputs
+
+5. **Testing Environment Setup**
+   - **Issue**: Missing module declarations for testing libraries
+   - **Solution**: Add type definitions for Jest and Testing Library 

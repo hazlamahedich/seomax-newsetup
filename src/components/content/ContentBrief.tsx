@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,18 +10,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ContentBriefService } from '@/lib/services/content-service';
 import { ContentBrief } from '@/lib/types/database.types';
-import { Loader2, Copy, FileDown } from 'lucide-react';
+import { Loader2, Copy, FileDown, AlertCircle } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
+// Define extended type for use in the component
+interface EnhancedContentBrief extends ContentBrief {
+  content_type: string;
+  content_length: number;
+  target_audience: string;
+  keywords: string[];
+  sections: Array<{
+    title: string;
+    description: string;
+    word_count: number;
+  }>;
+  sources: string[];
+  competitors?: string[];
+  additional_notes?: string;
+}
 
 interface ContentBriefGeneratorProps {
   projectId: string;
   briefId?: string;
-  onBriefGenerated?: (brief: ContentBrief) => void;
+  onBriefGenerated?: (brief: EnhancedContentBrief) => void;
+  onBriefUpdated?: (brief: EnhancedContentBrief) => void;
+  onBack?: () => void;
 }
 
 export function ContentBriefGenerator({
   projectId,
   briefId,
   onBriefGenerated,
+  onBriefUpdated,
+  onBack,
 }: ContentBriefGeneratorProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [targetKeyword, setTargetKeyword] = useState('');
@@ -32,86 +54,328 @@ export function ContentBriefGenerator({
   const [competitor2, setCompetitor2] = useState('');
   const [competitor3, setCompetitor3] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
-  const [generatedBrief, setGeneratedBrief] = useState<ContentBrief | null>(null);
+  const [generatedBrief, setGeneratedBrief] = useState<EnhancedContentBrief | null>(null);
   const [activeTab, setActiveTab] = useState('form');
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+  const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [newCollaborator, setNewCollaborator] = useState('');
+  const [seoInsights, setSeoInsights] = useState<string[]>([]);
+  const [comments, setComments] = useState<Array<{id: string; user: string; text: string; date: string}>>([]);
+  const [newComment, setNewComment] = useState('');
+  const [briefStatus, setBriefStatus] = useState<'draft' | 'review' | 'approved' | 'in-progress'>('draft');
+
+  // Effect to load an existing brief if briefId is provided
+  useEffect(() => {
+    if (briefId) {
+      loadExistingBrief(briefId);
+    }
+  }, [briefId]);
+
+  const loadExistingBrief = async (id: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const loadedBrief = await ContentBriefService.getContentBrief(id);
+      if (!loadedBrief) {
+        setError('Brief not found');
+        return;
+      }
+      
+      // Set form fields based on loaded brief
+      setTargetKeyword(loadedBrief.target_keyword);
+      
+      if (loadedBrief.outline) {
+        setContentType(loadedBrief.outline.contentType || 'blog');
+        setContentLength(loadedBrief.outline.wordCount?.toString() || '1500');
+        setTargetAudience(loadedBrief.outline.targetAudience || '');
+      }
+      
+      setAdditionalNotes(loadedBrief.research_notes || '');
+      
+      // Set competitor URLs if available
+      if (loadedBrief.competitor_insights && loadedBrief.competitor_insights.length > 0) {
+        loadedBrief.competitor_insights.forEach((competitor, index) => {
+          if (index === 0) setCompetitor1(competitor.url || '');
+          if (index === 1) setCompetitor2(competitor.url || '');
+          if (index === 2) setCompetitor3(competitor.url || '');
+        });
+      }
+      
+      // Transform to enhanced format
+      const sections = loadedBrief.outline?.sections || [];
+      const enhancedBrief: EnhancedContentBrief = {
+        ...loadedBrief,
+        content_type: loadedBrief.outline?.contentType || 'blog',
+        content_length: loadedBrief.outline?.wordCount || 1500,
+        target_audience: loadedBrief.outline?.targetAudience || '',
+        keywords: loadedBrief.secondary_keywords || [],
+        sections: sections,
+        sources: loadedBrief.outline?.sources || [
+          'Google Scholar',
+          'Industry reports',
+          'Expert interviews'
+        ],
+        competitors: loadedBrief.competitor_insights?.map((comp: { url?: string }) => comp.url) || [],
+        additional_notes: loadedBrief.research_notes || ''
+      };
+      
+      // Add mock SEO insights and collaboration data for the demo
+      setSeoInsights([
+        `Focus on "${loadedBrief.target_keyword}" in title, H1 and first paragraph`,
+        `Include at least 3 related terms: ${(loadedBrief.secondary_keywords || []).join(', ')}`,
+        'Use schema markup for better SERP visibility',
+        'Target a readability score of grade 7-8',
+        'Aim for at least 2 videos or images with proper alt text'
+      ]);
+      
+      setCollaborators(['alex@example.com', 'taylor@example.com']);
+      
+      setComments([
+        {
+          id: '1',
+          user: 'Alex Smith',
+          text: 'Can we add a section on industry statistics?',
+          date: '2023-10-15'
+        },
+        {
+          id: '2',
+          user: 'Taylor Jones',
+          text: 'I like the structure. Let\'s expand the case studies section.',
+          date: '2023-10-16'
+        }
+      ]);
+      
+      setBriefStatus('review');
+      
+      setGeneratedBrief(enhancedBrief);
+      setActiveTab('brief');
+    } catch (err) {
+      console.error('Error loading content brief:', err);
+      setError('Failed to load content brief. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateBrief = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      if (!generatedBrief || !briefId) {
+        setError('No brief to update');
+        return;
+      }
+      
+      // Clean up competitor URLs
+      const competitors = [competitor1, competitor2, competitor3]
+        .filter(c => c.trim() !== '')
+        .map(url => url.trim());
+      
+      // Create the updated brief data
+      const updatedBriefData = {
+        id: briefId,
+        title: `${contentType.charAt(0).toUpperCase() + contentType.slice(1)}: ${targetKeyword}`,
+        target_keyword: targetKeyword,
+        secondary_keywords: generatedBrief.keywords,
+        outline: {
+          contentType,
+          wordCount: parseInt(contentLength),
+          targetAudience,
+          sections: generatedBrief.sections,
+          sources: generatedBrief.sources
+        },
+        research_notes: additionalNotes || null,
+        competitor_insights: competitors.length > 0 ? competitors.map(url => ({ url })) : null
+      };
+      
+      // Call API to update brief
+      const updatedBrief = await ContentBriefService.updateContentBrief(updatedBriefData);
+      
+      // Transform the updated brief
+      const enhancedBrief: EnhancedContentBrief = {
+        ...updatedBrief,
+        content_type: contentType,
+        content_length: parseInt(contentLength),
+        target_audience: targetAudience,
+        keywords: generatedBrief.keywords,
+        sections: generatedBrief.sections,
+        sources: generatedBrief.sources,
+        competitors,
+        additional_notes: additionalNotes
+      };
+      
+      setGeneratedBrief(enhancedBrief);
+      
+      toast({
+        title: "Brief updated successfully",
+        description: `Your content brief for "${targetKeyword}" has been updated.`,
+      });
+      
+      if (onBriefUpdated) {
+        onBriefUpdated(enhancedBrief);
+      }
+    } catch (err) {
+      console.error('Error updating content brief:', err);
+      setError('Failed to update content brief. Please try again.');
+      toast({
+        variant: "destructive",
+        title: "Brief update failed",
+        description: "There was an error updating your content brief.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddCollaborator = () => {
+    if (!newCollaborator || !newCollaborator.includes('@')) return;
+    
+    if (!collaborators.includes(newCollaborator)) {
+      setCollaborators([...collaborators, newCollaborator]);
+      setNewCollaborator('');
+      
+      toast({
+        title: "Collaborator added",
+        description: `${newCollaborator} has been added to this brief.`,
+      });
+    }
+  };
+  
+  const handleRemoveCollaborator = (email: string) => {
+    setCollaborators(collaborators.filter(c => c !== email));
+  };
+  
+  const handleAddComment = () => {
+    if (!newComment.trim()) return;
+    
+    const comment = {
+      id: Date.now().toString(),
+      user: 'You',
+      text: newComment,
+      date: new Date().toISOString().split('T')[0]
+    };
+    
+    setComments([...comments, comment]);
+    setNewComment('');
+  };
+  
+  const handleUpdateStatus = (status: 'draft' | 'review' | 'approved' | 'in-progress') => {
+    setBriefStatus(status);
+    
+    toast({
+      title: "Status updated",
+      description: `Brief status changed to ${status}.`,
+    });
+  };
 
   const handleGenerateBrief = async () => {
     try {
       setIsLoading(true);
+      setError(null);
 
-      // In a real implementation, this would call the AI service to generate the brief
-      // For now, we'll use mock data based on inputs
+      // Clean up competitor URLs
       const competitors = [competitor1, competitor2, competitor3]
         .filter(c => c.trim() !== '')
         .map(url => url.trim());
 
+      // Create the brief data object
       const briefData = {
         project_id: projectId,
+        title: `${contentType.charAt(0).toUpperCase() + contentType.slice(1)}: ${targetKeyword}`,
         target_keyword: targetKeyword,
+        secondary_keywords: [
+          `${targetKeyword} best practices`,
+          `how to ${targetKeyword}`,
+          `${targetKeyword} examples`,
+          `${targetKeyword} benefits`
+        ],
+        topic_cluster_id: null,
+        outline: {
+          contentType,
+          wordCount: parseInt(contentLength),
+          targetAudience,
+          sections: [
+            {
+              title: 'Introduction',
+              description: `Introduce ${targetKeyword} and why it's important. Hook the reader with an interesting statistic or question.`,
+              word_count: Math.round(parseInt(contentLength) * 0.1)
+            },
+            {
+              title: `What is ${targetKeyword}?`,
+              description: 'Define the term clearly and explain its significance.',
+              word_count: Math.round(parseInt(contentLength) * 0.15)
+            },
+            {
+              title: `Benefits of ${targetKeyword}`,
+              description: 'Explain 3-5 key benefits, with examples for each.',
+              word_count: Math.round(parseInt(contentLength) * 0.25)
+            },
+            {
+              title: `How to Implement ${targetKeyword}`,
+              description: 'Step-by-step guide with actionable tips.',
+              word_count: Math.round(parseInt(contentLength) * 0.25)
+            },
+            {
+              title: 'Case Studies',
+              description: 'Include 1-2 real-world examples showing success.',
+              word_count: Math.round(parseInt(contentLength) * 0.15)
+            },
+            {
+              title: 'Conclusion',
+              description: 'Summarize key points and include a call to action.',
+              word_count: Math.round(parseInt(contentLength) * 0.1)
+            }
+          ]
+        },
+        research_notes: additionalNotes || null,
+        competitor_insights: competitors.length > 0 ? competitors.map(url => ({ url })) : null
+      };
+
+      // Call API to generate brief
+      const newBrief = await ContentBriefService.createContentBrief(briefData);
+      
+      // Transform the database brief into the enhanced format for the UI
+      const sections = briefData.outline.sections;
+      const enhancedBrief: EnhancedContentBrief = {
+        ...newBrief,
         content_type: contentType,
         content_length: parseInt(contentLength),
         target_audience: targetAudience,
-        competitors: competitors,
-        additional_notes: additionalNotes,
-        sections: [
-          {
-            title: 'Introduction',
-            description: `Introduce ${targetKeyword} and why it's important. Hook the reader with an interesting statistic or question.`,
-            word_count: Math.round(parseInt(contentLength) * 0.1)
-          },
-          {
-            title: `What is ${targetKeyword}?`,
-            description: 'Define the term clearly and explain its significance.',
-            word_count: Math.round(parseInt(contentLength) * 0.15)
-          },
-          {
-            title: `Benefits of ${targetKeyword}`,
-            description: 'Explain 3-5 key benefits, with examples for each.',
-            word_count: Math.round(parseInt(contentLength) * 0.25)
-          },
-          {
-            title: `How to Implement ${targetKeyword}`,
-            description: 'Step-by-step guide with actionable tips.',
-            word_count: Math.round(parseInt(contentLength) * 0.25)
-          },
-          {
-            title: 'Case Studies',
-            description: 'Include 1-2 real-world examples showing success.',
-            word_count: Math.round(parseInt(contentLength) * 0.15)
-          },
-          {
-            title: 'Conclusion',
-            description: 'Summarize key points and include a call to action.',
-            word_count: Math.round(parseInt(contentLength) * 0.1)
-          }
-        ],
-        keywords: [
-          targetKeyword,
-          `benefits of ${targetKeyword}`,
-          `${targetKeyword} examples`,
-          `how to use ${targetKeyword}`,
-          `${targetKeyword} guide`
-        ],
+        keywords: briefData.secondary_keywords || [],
+        sections: sections,
         sources: [
+          'Google Scholar',
           'Industry reports',
-          'Academic studies',
           'Expert interviews',
-          'Competitor analysis'
+          'Competitor analysis',
+          'Case studies'
         ],
-        status: 'draft'
+        competitors: competitors,
+        additional_notes: additionalNotes
       };
 
-      // Save to database
-      const savedBrief = await ContentBriefService.createContentBrief(briefData);
-      
-      setGeneratedBrief(savedBrief);
+      setGeneratedBrief(enhancedBrief);
       setActiveTab('brief');
       
+      toast({
+        title: "Brief created successfully",
+        description: `Your content brief for "${targetKeyword}" is ready.`,
+      });
+
       if (onBriefGenerated) {
-        onBriefGenerated(savedBrief);
+        onBriefGenerated(enhancedBrief);
       }
-    } catch (error) {
-      console.error('Error generating brief:', error);
+    } catch (err) {
+      console.error('Error generating content brief:', err);
+      setError('Failed to generate content brief. Please try again.');
+      toast({
+        variant: "destructive",
+        title: "Brief generation failed",
+        description: "There was an error creating your content brief.",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -119,86 +383,95 @@ export function ContentBriefGenerator({
 
   const handleCopyBrief = () => {
     if (!generatedBrief) return;
+    
+    try {
+      const briefText = `
+CONTENT BRIEF: ${generatedBrief.target_keyword}
+==========================================
+Type: ${generatedBrief.content_type}
+Target Audience: ${generatedBrief.target_audience}
+Word Count: ${generatedBrief.content_length}
 
-    const sections = generatedBrief.sections.map(section => (
-      `## ${section.title}\n${section.description}\nTarget word count: ${section.word_count}`
-    )).join('\n\n');
+KEYWORDS:
+${generatedBrief.keywords.join(', ')}
 
-    const keywords = `Keywords: ${generatedBrief.keywords.join(', ')}`;
-    const sources = `Sources: ${generatedBrief.sources.join(', ')}`;
-    const competitors = generatedBrief.competitors?.length ? 
-      `Competitors to analyze: ${generatedBrief.competitors.join(', ')}` : '';
-    const notes = generatedBrief.additional_notes ? 
-      `Additional notes: ${generatedBrief.additional_notes}` : '';
+STRUCTURE:
+${generatedBrief.sections.map(section => `
+${section.title} (${section.word_count} words)
+${section.description}
+`).join('\n')}
 
-    const fullBrief = `
-# Content Brief: ${generatedBrief.target_keyword}
+SOURCES:
+${generatedBrief.sources.join('\n')}
 
-Content type: ${generatedBrief.content_type}
-Target word count: ${generatedBrief.content_length}
-Target audience: ${generatedBrief.target_audience}
+ADDITIONAL NOTES:
+${generatedBrief.additional_notes || 'None'}
+`;
 
-${sections}
-
-${keywords}
-
-${sources}
-
-${competitors}
-
-${notes}
-`.trim();
-
-    navigator.clipboard.writeText(fullBrief)
-      .then(() => {
-        alert('Brief copied to clipboard!');
-      })
-      .catch(err => {
-        console.error('Failed to copy brief:', err);
+      navigator.clipboard.writeText(briefText);
+      toast({
+        title: "Brief copied to clipboard",
+        description: "The content brief has been copied to your clipboard.",
       });
+    } catch (err) {
+      console.error('Error copying brief:', err);
+      toast({
+        variant: "destructive",
+        title: "Copy failed",
+        description: "Failed to copy the brief to clipboard.",
+      });
+    }
   };
 
   const handleExportBrief = () => {
     if (!generatedBrief) return;
+    
+    try {
+      const briefText = `
+CONTENT BRIEF: ${generatedBrief.target_keyword}
+==========================================
+Type: ${generatedBrief.content_type}
+Target Audience: ${generatedBrief.target_audience}
+Word Count: ${generatedBrief.content_length}
 
-    const sections = generatedBrief.sections.map(section => (
-      `## ${section.title}\n${section.description}\nTarget word count: ${section.word_count}`
-    )).join('\n\n');
+KEYWORDS:
+${generatedBrief.keywords.join(', ')}
 
-    const keywords = `Keywords: ${generatedBrief.keywords.join(', ')}`;
-    const sources = `Sources: ${generatedBrief.sources.join(', ')}`;
-    const competitors = generatedBrief.competitors?.length ? 
-      `Competitors to analyze: ${generatedBrief.competitors.join(', ')}` : '';
-    const notes = generatedBrief.additional_notes ? 
-      `Additional notes: ${generatedBrief.additional_notes}` : '';
+STRUCTURE:
+${generatedBrief.sections.map(section => `
+${section.title} (${section.word_count} words)
+${section.description}
+`).join('\n')}
 
-    const fullBrief = `
-# Content Brief: ${generatedBrief.target_keyword}
+SOURCES:
+${generatedBrief.sources.join('\n')}
 
-Content type: ${generatedBrief.content_type}
-Target word count: ${generatedBrief.content_length}
-Target audience: ${generatedBrief.target_audience}
+ADDITIONAL NOTES:
+${generatedBrief.additional_notes || 'None'}
+`;
 
-${sections}
-
-${keywords}
-
-${sources}
-
-${competitors}
-
-${notes}
-`.trim();
-
-    const blob = new Blob([fullBrief], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `content-brief-${generatedBrief.target_keyword.replace(/\s+/g, '-').toLowerCase()}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const blob = new Blob([briefText], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `content-brief-${generatedBrief.target_keyword.replace(/\s+/g, '-').toLowerCase()}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Brief exported",
+        description: "The content brief has been exported as a text file.",
+      });
+    } catch (err) {
+      console.error('Error exporting brief:', err);
+      toast({
+        variant: "destructive",
+        title: "Export failed",
+        description: "Failed to export the brief.",
+      });
+    }
   };
 
   return (
@@ -216,6 +489,14 @@ ${notes}
               <CardDescription>Fill out the form to create a comprehensive content brief</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {error && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              
               <div className="space-y-2">
                 <Label htmlFor="targetKeyword">Target Keyword/Topic</Label>
                 <Input
@@ -381,7 +662,18 @@ ${notes}
                   ))}
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4 mt-6">
+                  <h3 className="font-semibold text-lg">SEO Insights</h3>
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <ul className="list-disc list-inside space-y-2">
+                      {seoInsights.map((insight, index) => (
+                        <li key={index} className="text-sm text-blue-800">{insight}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                   <div className="space-y-2">
                     <h3 className="font-semibold text-lg">Research Sources</h3>
                     <ul className="list-disc list-inside">
@@ -395,7 +687,7 @@ ${notes}
                     <div className="space-y-2">
                       <h3 className="font-semibold text-lg">Competitors to Analyze</h3>
                       <ul className="list-disc list-inside">
-                        {generatedBrief.competitors.map((competitor, index) => (
+                        {generatedBrief.competitors.map((competitor: string, index: number) => (
                           <li key={index}>
                             <a 
                               href={competitor.startsWith('http') ? competitor : `https://${competitor}`} 
@@ -413,20 +705,109 @@ ${notes}
                 </div>
                 
                 {generatedBrief.additional_notes && (
-                  <div className="space-y-2">
+                  <div className="space-y-2 mt-6">
                     <h3 className="font-semibold text-lg">Additional Notes</h3>
                     <p className="text-sm">{generatedBrief.additional_notes}</p>
                   </div>
                 )}
+
+                <div className="space-y-4 mt-6">
+                  <h3 className="font-semibold text-lg">Collaboration</h3>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-medium">Status</h4>
+                      <Select value={briefStatus} onValueChange={(val: any) => handleUpdateStatus(val as 'draft' | 'review' | 'approved' | 'in-progress')}>
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="review">In Review</SelectItem>
+                          <SelectItem value="approved">Approved</SelectItem>
+                          <SelectItem value="in-progress">In Progress</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="mt-4">
+                      <h4 className="font-medium mb-2">Collaborators</h4>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {collaborators.map((email, index) => (
+                          <div key={index} className="bg-gray-100 text-gray-800 text-xs px-3 py-1 rounded-full flex items-center">
+                            {email}
+                            <button 
+                              onClick={() => handleRemoveCollaborator(email)} 
+                              className="ml-2 text-gray-500 hover:text-gray-700"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <Input 
+                          placeholder="Email address" 
+                          value={newCollaborator} 
+                          onChange={(e) => setNewCollaborator(e.target.value)}
+                          className="text-sm"
+                        />
+                        <Button size="sm" onClick={handleAddCollaborator}>Add</Button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4">
+                    <h4 className="font-medium mb-2">Comments</h4>
+                    <div className="space-y-3 mb-3">
+                      {comments.map((comment) => (
+                        <div key={comment.id} className="bg-gray-50 p-3 rounded">
+                          <div className="flex justify-between text-xs text-gray-500 mb-1">
+                            <span className="font-medium">{comment.user}</span>
+                            <span>{comment.date}</span>
+                          </div>
+                          <p className="text-sm">{comment.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Textarea 
+                        placeholder="Add a comment..." 
+                        value={newComment} 
+                        onChange={(e) => setNewComment(e.target.value)}
+                        className="text-sm"
+                        rows={2}
+                      />
+                      <Button className="self-end" size="sm" onClick={handleAddComment}>
+                        Comment
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
-              <CardFooter>
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => setActiveTab('form')}
-                >
-                  Edit Brief Parameters
-                </Button>
+              <CardFooter className="flex justify-between pt-6 border-t">
+                {onBack && (
+                  <Button variant="outline" onClick={onBack}>
+                    Back to Briefs
+                  </Button>
+                )}
+                <div className="flex gap-2">
+                  {briefId && (
+                    <Button onClick={handleUpdateBrief} disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Updating...
+                        </>
+                      ) : (
+                        'Update Brief'
+                      )}
+                    </Button>
+                  )}
+                  <Button variant="default">
+                    Create Content
+                  </Button>
+                </div>
               </CardFooter>
             </Card>
           )}

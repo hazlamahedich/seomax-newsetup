@@ -5,11 +5,15 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, FileText, Layers, BarChart2, Book, PenTool } from 'lucide-react';
+import { ChevronLeft, FileText, Layers, BarChart2, Book, PenTool, LineChart, PieChart, Lightbulb } from 'lucide-react';
 import { ContentPagesList } from '@/components/content/ContentPagesList';
 import { ContentEditor } from '@/components/content/ContentEditor';
 import { TopicClusterMap } from '@/components/content/TopicClusterMap';
 import { ContentBriefGenerator } from '@/components/content/ContentBrief';
+import { ContentAnalyzer } from '@/components/content/ContentAnalyzer';
+import { ContentOptimizer } from '@/components/content/ContentOptimizer';
+import { ContentPerformance } from '@/components/content/ContentPerformance';
+import { ContentGapAnalysis } from '@/components/content/ContentGapAnalysis';
 import { ProjectService } from '@/lib/services/project-service';
 
 export default function ContentDashboard() {
@@ -23,6 +27,9 @@ export default function ContentDashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isViewingPerformance, setIsViewingPerformance] = useState(false);
+  const [isAnalyzingGap, setIsAnalyzingGap] = useState(false);
 
   useEffect(() => {
     loadProjects();
@@ -55,36 +62,75 @@ export default function ContentDashboard() {
 
   const handleProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId);
-    // Reset other states
+    // Reset all states
     setIsEditing(false);
     setSelectedPageId(null);
     setIsAnalyzing(false);
+    setIsOptimizing(false);
+    setIsViewingPerformance(false);
+    setIsAnalyzingGap(false);
     setActiveTab('content-pages');
   };
 
   const handleCreatePage = () => {
     setIsEditing(true);
     setSelectedPageId(null);
+    resetOtherStates('edit');
   };
 
   const handleEditPage = (pageId: string) => {
     setSelectedPageId(pageId);
     setIsEditing(true);
+    resetOtherStates('edit');
   };
 
   const handleAnalyzePage = (pageId: string) => {
     setSelectedPageId(pageId);
     setIsAnalyzing(true);
+    resetOtherStates('analyze');
+  };
+
+  const handleOptimizePage = (pageId: string) => {
+    setSelectedPageId(pageId);
+    setIsOptimizing(true);
+    resetOtherStates('optimize');
+  };
+
+  const handleViewPerformance = (pageId: string) => {
+    setSelectedPageId(pageId);
+    setIsViewingPerformance(true);
+    resetOtherStates('performance');
+  };
+
+  const handleAnalyzeGap = (pageId: string) => {
+    setSelectedPageId(pageId);
+    setIsAnalyzingGap(true);
+    resetOtherStates('gap');
+  };
+
+  const resetOtherStates = (activeState: string) => {
+    if (activeState !== 'edit') setIsEditing(false);
+    if (activeState !== 'analyze') setIsAnalyzing(false);
+    if (activeState !== 'optimize') setIsOptimizing(false);
+    if (activeState !== 'performance') setIsViewingPerformance(false);
+    if (activeState !== 'gap') setIsAnalyzingGap(false);
   };
 
   const handleBack = () => {
-    if (isEditing || isAnalyzing) {
-      setIsEditing(false);
-      setIsAnalyzing(false);
-      setSelectedPageId(null);
+    if (isEditing || isAnalyzing || isOptimizing || isViewingPerformance || isAnalyzingGap) {
+      resetAllStates();
     } else {
       router.push('/dashboard');
     }
+  };
+
+  const resetAllStates = () => {
+    setIsEditing(false);
+    setIsAnalyzing(false);
+    setIsOptimizing(false);
+    setIsViewingPerformance(false);
+    setIsAnalyzingGap(false);
+    setSelectedPageId(null);
   };
 
   const renderPageContent = () => {
@@ -98,7 +144,7 @@ export default function ContentDashboard() {
       );
     }
 
-    if (isEditing) {
+    if (isEditing && selectedProjectId) {
       return (
         <div className="space-y-4">
           <Button variant="outline" onClick={handleBack} className="mb-4">
@@ -109,31 +155,54 @@ export default function ContentDashboard() {
             projectId={selectedProjectId} 
             pageId={selectedPageId || undefined} 
             onSave={() => {
-              setIsEditing(false);
-              setSelectedPageId(null);
+              resetAllStates();
             }}
           />
         </div>
       );
     }
 
-    if (isAnalyzing) {
+    if (isAnalyzing && selectedPageId) {
       return (
         <div className="space-y-4">
-          <Button variant="outline" onClick={handleBack} className="mb-4">
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Back to Content Pages
-          </Button>
-          {/* Placeholder for ContentAnalyzer component */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Content Analysis</CardTitle>
-              <CardDescription>Detailed analysis of your content</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p>This is a placeholder for the content analysis component.</p>
-            </CardContent>
-          </Card>
+          <ContentAnalyzer 
+            contentPageId={selectedPageId} 
+            onBack={handleBack} 
+          />
+        </div>
+      );
+    }
+
+    if (isOptimizing && selectedPageId) {
+      return (
+        <div className="space-y-4">
+          <ContentOptimizer 
+            contentPageId={selectedPageId} 
+            onBack={handleBack} 
+            onEdit={handleEditPage}
+          />
+        </div>
+      );
+    }
+
+    if (isViewingPerformance && selectedPageId) {
+      return (
+        <div className="space-y-4">
+          <ContentPerformance 
+            contentPageId={selectedPageId}
+            onBack={handleBack}
+          />
+        </div>
+      );
+    }
+
+    if (isAnalyzingGap && selectedPageId) {
+      return (
+        <div className="space-y-4">
+          <ContentGapAnalysis 
+            contentPageId={selectedPageId}
+            onBack={handleBack}
+          />
         </div>
       );
     }
@@ -172,6 +241,9 @@ export default function ContentDashboard() {
             onCreatePage={handleCreatePage}
             onEditPage={handleEditPage}
             onAnalyzePage={handleAnalyzePage}
+            onOptimizePage={handleOptimizePage}
+            onViewPerformance={handleViewPerformance}
+            onAnalyzeGap={handleAnalyzeGap}
           />
         </TabsContent>
 
@@ -189,15 +261,58 @@ export default function ContentDashboard() {
               <CardTitle>Content Analytics</CardTitle>
               <CardDescription>Performance metrics for your content</CardDescription>
             </CardHeader>
-            <CardContent className="h-[400px] flex items-center justify-center">
-              <div className="text-center space-y-2">
-                <PenTool className="h-12 w-12 mx-auto text-gray-400" />
-                <h3 className="text-lg font-medium">Content Analytics Coming Soon</h3>
-                <p className="text-sm text-gray-500 max-w-md">
-                  In a future update, this section will provide detailed analytics on your content performance,
-                  including traffic, engagement metrics, and conversion rates.
-                </p>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center">
+                      <LineChart className="h-4 w-4 mr-2 text-blue-500" />
+                      Performance Tracking
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Track your content performance over time with detailed metrics.
+                    </p>
+                    <Button className="w-full" size="sm" variant="outline">View All</Button>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center">
+                      <PieChart className="h-4 w-4 mr-2 text-purple-500" />
+                      Content Gap Analysis
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Identify missing topics by analyzing competitor content.
+                    </p>
+                    <Button className="w-full" size="sm" variant="outline">View All</Button>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center">
+                      <Lightbulb className="h-4 w-4 mr-2 text-amber-500" />
+                      Optimization Suggestions
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Get AI-powered suggestions to improve your content.
+                    </p>
+                    <Button className="w-full" size="sm" variant="outline">View All</Button>
+                  </CardContent>
+                </Card>
               </div>
+              
+              <p className="text-center text-sm text-muted-foreground">
+                Select a content page from the Content Pages tab to access detailed analytics
+                and optimization features.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -214,7 +329,7 @@ export default function ContentDashboard() {
         </p>
       </div>
 
-      {selectedProjectId && projects.length > 0 && !isEditing && !isAnalyzing && (
+      {selectedProjectId && projects.length > 0 && !isEditing && !isAnalyzing && !isOptimizing && !isViewingPerformance && !isAnalyzingGap && (
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="flex flex-wrap gap-2">

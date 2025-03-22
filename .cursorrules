@@ -1,0 +1,58 @@
+# SEOMax Project Intelligence
+
+## Project Structure
+- Next.js 15+ project using the App Router
+- Tailwind CSS with shadcn/ui components
+- LangChain for AI services
+- Supabase for database and authentication
+- React ecosystem (React Query, Zustand, Framer Motion)
+
+## Critical Implementation Paths
+- AI-powered analysis uses ContentAnalyzer and KeywordAnalyzer services
+- React's strict mode can cause double rendering, be cautious with stateful operations
+- User auth flows through next-auth with Supabase credentials provider
+- Content analysis runs in stages: readability → keyword usage → structure → suggestions
+
+## User Preferences
+- Clear, actionable suggestions for content optimization
+- Visual representation of SEO metrics with trends over time
+- Simplified UI for complex analysis tasks
+- Quick access to most important metrics from dashboard
+
+## Project-Specific Patterns
+- Component files follow naming pattern: [Functionality][ComponentType].tsx
+- Services use class-based approach with instance methods
+- AI services separate prompts from implementation logic
+- State management combines React Query for server state and Zustand for UI state
+- Testing uses React Testing Library with Jest
+
+## Known Challenges
+- Hydration errors can occur with browser extensions like Grammarly
+  - Solution: Use suppressHydrationWarning attribute on body and html
+- Session fetch errors with "Unexpected end of JSON input"
+  - Solution: Provide fallback session object in SessionProvider
+- Supabase client export issues
+  - Solution: Export createClient directly from client.ts
+- LangChain compatibility with TypeScript requires custom type declarations
+- Mock services simulate API calls until actual integrations are built
+
+## Evolution of Decisions
+- Moved from route handlers to server components for data fetching
+- Enhanced error handling with more detailed user feedback
+- Added comprehensive type safety for all API responses
+- Improved state management with better typing and error boundaries
+- Added middleware for handling auth edge cases
+
+## Troubleshooting Tips
+- If encountering hydration errors, check DOM modifications from browser extensions
+- For session issues, ensure SessionProvider has fallback options
+- Network timeouts may require adjusting fetch timeout settings
+- If tests are failing, check Jest DOM matchers and mock service setup
+- Check for missing environment variables when Supabase connections fail
+
+## Code Conventions
+- Use named exports for components and functions
+- Include prop interfaces for all components
+- Follow the naming pattern: interface [ComponentName]Props
+- Place shared utilities in the /lib directory
+- Handle loading and error states for all data-dependent components 

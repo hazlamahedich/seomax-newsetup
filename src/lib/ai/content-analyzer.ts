@@ -378,6 +378,59 @@ export interface OptimizedContentResult {
   changesExplanation: string;
 }
 
+// Add new interfaces for new methods
+export interface CompetitorComparison {
+  competitor: string;
+  wordCount: number;
+  topKeywords: string[];
+  missingTopics: string[];
+  strengths: string[];
+  weaknesses: string[];
+  score: number;
+}
+
+export interface GapAnalysis {
+  missingKeywords: string[];
+  missingTopics: string[];
+  contentGaps: Array<{
+    topic: string;
+    importance: number;
+    suggestedContent: string;
+  }>;
+  competitorInsights: Array<{
+    competitor: string;
+    uniqueValue: string;
+  }>;
+}
+
+export interface SentimentAnalysis {
+  overall: 'positive' | 'neutral' | 'negative';
+  score: number;
+  toneAnalysis: {
+    formal: number;
+    conversational: number;
+    technical: number;
+    persuasive: number;
+  };
+  emotionalTriggers: string[];
+  suggestions: string[];
+}
+
+export interface SeoSuggestion {
+  type: 'title' | 'meta' | 'heading' | 'content' | 'structure';
+  suggestion: string;
+  reason: string;
+  impact: 'high' | 'medium' | 'low';
+}
+
+export interface OptimizationSuggestion {
+  original: string;
+  optimized: string;
+  explanation: string;
+  keywords: string[];
+  section?: string;
+}
+
 // Main ContentAnalyzer class
 export class ContentAnalyzer {
   private model: ChatOpenAI;
@@ -713,6 +766,238 @@ export class ContentAnalyzer {
     } catch (error) {
       console.error("Error optimizing content:", error);
       throw new Error("Failed to optimize content");
+    }
+  }
+
+  /**
+   * Compare content with competitors
+   */
+  async compareWithCompetitors(content: string, competitorUrls: string[]): Promise<CompetitorComparison[]> {
+    try {
+      // Create a prompt for competitor comparison
+      const competitorComparisonPrompt = PromptTemplate.fromTemplate(`
+        You are an SEO competitor analysis expert. Compare the original content with the content from competitors.
+        
+        Original Content:
+        {content}
+        
+        Competitor Content:
+        {competitorContent}
+        
+        Analyze how the original content compares to the competitor content, focusing on:
+        1. Word count comparison
+        2. Keywords that are present in competitor content but missing in original
+        3. Topics covered by competitor but not in original
+        4. Strengths of the original content
+        5. Weaknesses of the original content compared to competitor
+        6. Overall competitive score (0-100)
+        
+        Format your response as JSON according to the CompetitorComparison interface.
+      `);
+      
+      // For demonstration purposes, we'll create mock competitor data
+      // In a real implementation, you would scrape the competitor content
+      const competitorResults: CompetitorComparison[] = competitorUrls.map((url, index) => {
+        return {
+          competitor: url,
+          wordCount: [1200, 1500, 1800, 2000][index % 4],
+          topKeywords: ['SEO', 'content marketing', 'digital strategy', 'keyword research'].slice(0, 3 + index % 2),
+          missingTopics: ['competitor analysis', 'backlink strategy', 'technical SEO'].slice(0, 2 + index % 2),
+          strengths: ['detailed examples', 'clear structure', 'actionable tips'].slice(0, 2 + index % 2),
+          weaknesses: ['lacks competitor analysis', 'no case studies', 'missing visuals'].slice(0, 2 + index % 2),
+          score: 65 + (index * 5) % 20
+        };
+      });
+      
+      return competitorResults;
+    } catch (error) {
+      console.error("Error comparing with competitors:", error);
+      throw new Error("Failed to compare with competitors");
+    }
+  }
+
+  /**
+   * Generate SEO suggestions for content
+   */
+  async generateSeoSuggestions(content: string, keyword: string): Promise<SeoSuggestion[]> {
+    try {
+      // Create a prompt for SEO suggestions
+      const seoSuggestionsPrompt = PromptTemplate.fromTemplate(`
+        You are an SEO expert. Generate specific SEO improvement suggestions for the following content.
+        
+        Content:
+        {content}
+        
+        Target Keyword:
+        {keyword}
+        
+        Provide 5-7 actionable SEO suggestions covering:
+        1. Title optimization
+        2. Meta description improvements
+        3. Heading structure
+        4. Content body improvements
+        5. Internal linking opportunities
+        
+        Format your response as JSON with an array of SEO suggestions, each containing:
+        - type: the type of suggestion (title, meta, heading, content, structure)
+        - suggestion: the specific recommendation
+        - reason: why this would improve SEO
+        - impact: the potential impact (high/medium/low)
+      `);
+
+      const formattedPrompt = await seoSuggestionsPrompt.format({
+        content,
+        keyword,
+      });
+
+      const response = await this.model.invoke(formattedPrompt);
+      const responseText = response.content.toString();
+      
+      // Extract JSON from response
+      const jsonMatch = responseText.match(/```json\n([\s\S]*)\n```/) || 
+                         responseText.match(/{[\s\S]*}/);
+      
+      const jsonContent = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseText;
+      
+      return JSON.parse(jsonContent);
+    } catch (error) {
+      console.error("Error generating SEO suggestions:", error);
+      throw new Error("Failed to generate SEO suggestions");
+    }
+  }
+
+  /**
+   * Analyze content sentiment and tone
+   */
+  async analyzeSentiment(content: string): Promise<SentimentAnalysis> {
+    try {
+      // Create a prompt for sentiment analysis
+      const sentimentAnalysisPrompt = PromptTemplate.fromTemplate(`
+        You are a content tone and sentiment analysis expert. Analyze the following content.
+        
+        Content:
+        {content}
+        
+        Provide a detailed sentiment and tone analysis including:
+        1. Overall sentiment (positive, neutral, or negative)
+        2. Sentiment score (0-100)
+        3. Tone analysis (levels of formal, conversational, technical, and persuasive tones)
+        4. Emotional triggers present in the content
+        5. Suggestions for tone improvements
+        
+        Format your response as JSON according to the SentimentAnalysis interface.
+      `);
+
+      const formattedPrompt = await sentimentAnalysisPrompt.format({
+        content,
+      });
+
+      const response = await this.model.invoke(formattedPrompt);
+      const responseText = response.content.toString();
+      
+      // Extract JSON from response
+      const jsonMatch = responseText.match(/```json\n([\s\S]*)\n```/) || 
+                         responseText.match(/{[\s\S]*}/);
+      
+      const jsonContent = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseText;
+      
+      return JSON.parse(jsonContent);
+    } catch (error) {
+      console.error("Error analyzing sentiment:", error);
+      throw new Error("Failed to analyze content sentiment");
+    }
+  }
+
+  /**
+   * Perform content gap analysis compared to competitors
+   */
+  async performGapAnalysis(content: string, keyword: string, competitorUrls: string[]): Promise<GapAnalysis> {
+    try {
+      // For demonstration purposes, we'll return mock gap analysis
+      // In a real implementation, you would analyze competitor content
+      return {
+        missingKeywords: [
+          `${keyword} statistics`,
+          `${keyword} examples`,
+          `${keyword} case studies`,
+          `${keyword} tools`
+        ],
+        missingTopics: [
+          `How to measure ${keyword} success`,
+          `${keyword} best practices`,
+          `${keyword} challenges and solutions`,
+        ],
+        contentGaps: [
+          {
+            topic: `${keyword} ROI calculation`,
+            importance: 8,
+            suggestedContent: `Add a section explaining how to calculate and measure ROI for ${keyword} initiatives, with examples and formulas.`
+          },
+          {
+            topic: `${keyword} industry benchmarks`,
+            importance: 7,
+            suggestedContent: `Include industry benchmarks and statistics to help readers understand what good performance looks like.`
+          },
+          {
+            topic: `${keyword} tools comparison`,
+            importance: 6,
+            suggestedContent: `Create a comparison table of top tools for ${keyword} with features, pricing, and pros/cons.`
+          }
+        ],
+        competitorInsights: competitorUrls.map((url, index) => ({
+          competitor: url,
+          uniqueValue: [`Comprehensive case studies`, `Interactive tools`, `Video tutorials`, `Expert interviews`][index % 4]
+        }))
+      };
+    } catch (error) {
+      console.error("Error performing gap analysis:", error);
+      throw new Error("Failed to perform content gap analysis");
+    }
+  }
+
+  /**
+   * Generate content optimization suggestions
+   */
+  async generateOptimizationSuggestions(content: string, keywords: string[]): Promise<OptimizationSuggestion[]> {
+    try {
+      // Create a prompt for optimization suggestions
+      const optimizationPrompt = PromptTemplate.fromTemplate(`
+        You are an expert content optimizer. Analyze the following content and suggest specific optimization improvements.
+        
+        Content:
+        {content}
+        
+        Target Keywords:
+        {keywords}
+        
+        Suggest 3-5 specific content optimizations that would improve this content for SEO and readability.
+        For each suggestion:
+        1. Include the original text
+        2. Provide an optimized version of the text
+        3. Explain why the optimization improves the content
+        4. Specify which keywords are being targeted
+        
+        Format your response as JSON with an array of optimization suggestions.
+      `);
+
+      const formattedPrompt = await optimizationPrompt.format({
+        content,
+        keywords: keywords.join(', '),
+      });
+
+      const response = await this.model.invoke(formattedPrompt);
+      const responseText = response.content.toString();
+      
+      // Extract JSON from response
+      const jsonMatch = responseText.match(/```json\n([\s\S]*)\n```/) || 
+                         responseText.match(/{[\s\S]*}/);
+      
+      const jsonContent = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseText;
+      
+      return JSON.parse(jsonContent);
+    } catch (error) {
+      console.error("Error generating optimization suggestions:", error);
+      throw new Error("Failed to generate optimization suggestions");
     }
   }
 } 

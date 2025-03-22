@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, PlusCircle, Edit, BarChart2, Trash2, ExternalLink } from 'lucide-react';
+import { Search, PlusCircle, Edit, BarChart2, Trash2, ExternalLink, Lightbulb, LineChart, PieChart } from 'lucide-react';
 import { ContentPageService } from '@/lib/services/content-service';
 import { ContentPage } from '@/lib/types/database.types';
 
@@ -16,6 +16,9 @@ interface ContentPagesListProps {
   onCreatePage?: () => void;
   onEditPage?: (pageId: string) => void;
   onAnalyzePage?: (pageId: string) => void;
+  onOptimizePage?: (pageId: string) => void;
+  onViewPerformance?: (pageId: string) => void;
+  onAnalyzeGap?: (pageId: string) => void;
 }
 
 export function ContentPagesList({
@@ -23,6 +26,9 @@ export function ContentPagesList({
   onCreatePage,
   onEditPage,
   onAnalyzePage,
+  onOptimizePage,
+  onViewPerformance,
+  onAnalyzeGap,
 }: ContentPagesListProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
@@ -179,10 +185,10 @@ export function ContentPagesList({
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={page.analyzed_at ? 'default' : 'outline'}
-                        className={page.analyzed_at ? 'bg-blue-100 text-blue-800' : ''}
+                        variant={page.status !== 'not-analyzed' ? 'default' : 'outline'}
+                        className={page.status !== 'not-analyzed' ? 'bg-blue-100 text-blue-800' : ''}
                       >
-                        {page.analyzed_at ? 'Analyzed' : 'Draft'}
+                        {page.status !== 'not-analyzed' ? 'Analyzed' : 'Draft'}
                       </Badge>
                     </TableCell>
                     <TableCell>{getSeoScoreBadge(page.seo_score)}</TableCell>
@@ -207,6 +213,36 @@ export function ContentPagesList({
                         >
                           <BarChart2 className="h-4 w-4" />
                         </Button>
+                        {onOptimizePage && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onOptimizePage(page.id)}
+                            title="Optimize content"
+                          >
+                            <Lightbulb className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {onViewPerformance && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onViewPerformance(page.id)}
+                            title="View performance"
+                          >
+                            <LineChart className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {onAnalyzeGap && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onAnalyzeGap(page.id)}
+                            title="Gap analysis"
+                          >
+                            <PieChart className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

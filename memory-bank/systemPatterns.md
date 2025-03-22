@@ -1,125 +1,121 @@
-# System Patterns: SEOMax Architecture
+# System Patterns
 
-## System Architecture
-SEOMax follows a modern web application architecture with these key components:
+## Architecture Overview
 
-1. **Frontend Layer**:
-   - Next.js with App Router for server components and API routes
-   - React components organized by feature and reusability
-   - Tailwind CSS with shadcn/ui for consistent styling
-   - Framer Motion for selective animations and transitions
+SEOMax follows a modern web application architecture with the following key components:
 
-2. **State Management**:
-   - Primarily server components with dynamic rendering
-   - React server actions for form submissions
-   - Local client component state for UI-specific interactions
-   - Zustand for global state management across components
+- **Frontend Framework**: Next.js 15+ with App Router for server and client components
+- **UI Framework**: React with Tailwind CSS and shadcn/ui for consistent design
+- **State Management**: 
+  - Server state managed with React Query (TanStack Query)
+  - UI state managed with Zustand
+- **Authentication**: Next-Auth with Supabase as credential provider
+- **Database**: Supabase PostgreSQL with Row-Level Security
+- **AI Services**: LangChain for structured AI interactions
+- **API Layer**: Server Components and API Routes for data fetching
 
-3. **Data Layer**:
-   - Supabase PostgreSQL for structured data storage
-   - Supabase Auth for user authentication
-   - Service classes for data operations
-   - React Query for efficient data fetching and caching
+## Component Structure
 
-4. **AI Integration**:
-   - LangChain for structured AI workflows and prompt management
-   - ChatOpenAI integration for keyword and content analysis
-   - Custom prompt templates for specific analysis types
-   - Structured output formats for consistent AI responses
-   - Error handling for AI service calls
+SEOMax organizes components hierarchically:
 
-5. **Performance Optimization**:
-   - Dynamic rendering for data-dependent pages
-   - Efficient SQL queries with proper relations
-   - Separation of concerns for maintainability
-   - Custom type declarations for third-party libraries
+```
+/components
+  /ui             - Reusable UI components from shadcn
+  /dashboard      - Dashboard-specific components
+  /content        - Content analysis components
+  /keywords       - Keyword research components
+  /topics         - Topic cluster components
+  /projects       - Project management components
+  /auth           - Authentication components
+  /layout         - Layout components (navigation, header, footer)
+```
 
-## Key Technical Decisions
+### Key Components
 
-1. **App Router & Server Components**:
-   - Using Next.js App Router for improved performance and SEO
-   - Server components for data fetching and rendering
-   - Dynamic exports to ensure latest data is displayed
-   - Client components for interactive UI elements
+1. **Content Analysis Components**:
+   - `ContentOptimizer` - Suggests improvements for content SEO
+   - `ContentPerformance` - Tracks and visualizes content metrics
+   - `ContentGapAnalysis` - Identifies missing keywords compared to competitors
+   - `ContentBrief` - Generates structured content briefs
+   - `TopicClusterMap` - Visualizes topic relationships
 
-2. **Database Schema Design**:
-   - Normalized schema with efficient relationships
-   - Project-centric organization with keywords, rankings, and content
-   - User-based data segregation
-   - Implementing row-level security for multi-tenant data
+2. **Service Layer Components**:
+   - Content services for data operations
+   - AI analysis services for intelligent processing
+   - Authentication services
 
-3. **Authentication Flow**:
-   - Email/password login via Supabase
-   - Session validation on protected routes
-   - Redirect to login for unauthenticated users
-   - Custom hook (useAuth) for authentication state
+## Data Flow Patterns
 
-4. **AI Analysis Architecture**:
-   - Modular AI services for different analysis types
-   - Structured prompt engineering for consistent results
-   - JSON parsing of AI responses for structured data
-   - Separation of research, analysis, and suggestion generation
+1. **Content Analysis Flow**:
+   - Content is processed through multiple stages:
+   - Readability analysis → Keyword usage → Structure analysis → Competitor comparison → Suggestion generation
 
-## Design Patterns in Use
+2. **Server/Client Pattern**:
+   - Server components fetch data and pass to client components
+   - Client components handle interactivity and state updates
+   - React Server Components optimize initial page load
+   - Client components handle interactive elements
 
-1. **Component Composition**:
-   - Building complex UI from smaller, reusable components
-   - Tab-based navigation with consistent patterns
-   - Card-based content display for consistency
+3. **Error Handling Pattern**:
+   - All data fetching wrapped in try/catch blocks
+   - Error boundaries at component level
+   - User-facing error messages with actionable guidance
+   - Error reporting to logging service
 
-2. **Service Pattern**:
-   - Dedicated service classes for data operations (ProjectService, KeywordService)
-   - AI service classes with structured methods (KeywordAnalyzer, ContentAnalyzer)
-   - Static methods for server component compatibility
-   - Proper error handling and logging
-   - Centralized data access logic
+## State Management
 
-3. **Page Layout Pattern**:
-   - Consistent layout with navigation links
-   - Tab navigation for section switching
-   - Project-centric navigation with ID-based routing
-   - Conditional rendering based on data state (loading, empty, error)
+1. **Server State**:
+   - React Query for caching and revalidation
+   - Configured with defaults:
+     - `refetchOnWindowFocus: false` to prevent excessive refetching
+     - `retry: 1` for single retry on failure
+     - `staleTime: 60 * 1000` for 1-minute cache freshness
 
-4. **Data Display Patterns**:
-   - Card-based metric display for dashboard
-   - Interactive keyword list with selection state
-   - Tabbed content display for analysis results
-   - Loading and error states with appropriate feedback
+2. **UI State**:
+   - Zustand for simple, atomic state updates
+   - Clear state slices for different features
+   - Persisted state for user preferences
 
-5. **Form Handling Pattern**:
-   - Controlled components for form inputs
-   - Async form submission with loading state
-   - Error handling and validation
-   - Consistent form layout and button placement
+## Authentication Pattern
 
-## Component Relationships
+1. **Auth Flow**:
+   - Next Auth session provider
+   - Middleware for protected routes
+   - Session timeout handling
+   - Automatic redirect to login
 
-1. **Authentication Flow**:
-   - AuthProvider → Login/Signup Forms → Dashboard
+## Service Layer Pattern
 
-2. **Project Management Flow**:
-   - Dashboard → Project List → Project Detail
-   - Project Detail → Project Settings → Edit Project Form
-   - New Project Page → Project Form → Project Service
+1. **AI Services**:
+   - Class-based approach with instance methods
+   - Separation of prompt engineering from implementation
+   - Type-safe interfaces for all AI responses
+   - ContentAnalyzer and KeywordAnalyzer as core services
 
-3. **Keyword Research Flow**:
-   - Project Detail → Keywords Page → Keyword List
-   - Keywords Page → Selected Keyword → Keyword Analysis
-   - Keyword Analysis → Research/Competition/Trends Tabs → Analysis Display
-   - Add Keyword Form → Keywords Service → Keyword List Update
+2. **Data Services**:
+   - CRUD operations wrapped in service classes
+   - Error handling and data transformation
+   - Caching strategies for performance
 
-4. **Content Analysis Flow**:
-   - Project Detail → Content Page → Content List
-   - Content Page → Content Detail → Content Analysis
-   - Content Analysis → Readability/Keywords/Structure Tabs → Suggestions
+## Testing Pattern
 
-5. **Service Architecture**:
-   - ProjectService → Database Operations → UI Components
-   - KeywordService → Database Operations → UI Components
-   - KeywordAnalyzer → AI Operations → Analysis Display
-   - ContentAnalyzer → AI Operations → Analysis Display
+1. **Component Testing**:
+   - React Testing Library for component behavior
+   - Mock services for API dependencies
+   - User event simulation for interaction testing
 
-6. **Navigation Structure**:
-   - Dashboard → Project List → Project Detail
-   - Project Detail → Tab Navigation (Overview, Keywords, Content, Settings)
-   - Tab Content → Feature-specific Components 
+## Known Issues and Mitigation Strategies
+
+1. **Hydration Issues**:
+   - `suppressHydrationWarning` on html/body elements for browser extensions
+   - Consistent initial state between server and client
+   - Careful handling of date/time and random values
+
+2. **API Error Handling**:
+   - Timeout handling for external services
+   - Graceful degradation with fallback UI
+   - Detailed error messages for debugging
+
+3. **Session Management**:
+   - Fallback session objects to prevent rendering errors
+   - Clear timeout configuration 

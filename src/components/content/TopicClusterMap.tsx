@@ -6,7 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { TopicClusterService } from '@/lib/services/content-service';
-import { TopicCluster } from '@/lib/types/database.types';
+import { TopicCluster as BaseTopicCluster } from '@/lib/types/database.types';
+
+// Extended TopicCluster interface with properties needed for visualization
+interface TopicCluster extends BaseTopicCluster {
+  main_topic: string; // Main topic name for visualization
+  subtopics: Array<{
+    name: string;
+    keywords: string[];
+    content_ideas: string[];
+  }>;
+}
 
 interface TopicClusterMapProps {
   projectId: string;
@@ -43,7 +53,15 @@ export function TopicClusterMap({ projectId, clusterId, onCreateCluster }: Topic
     try {
       setIsLoading(true);
       const projectClusters = await TopicClusterService.getTopicClusters(projectId);
-      setClusters(projectClusters);
+      
+      // Transform each cluster to include visualization properties
+      const extendedClusters: TopicCluster[] = projectClusters.map(cluster => ({
+        ...cluster,
+        main_topic: cluster.name || cluster.main_keyword,
+        subtopics: generateSubtopicsFromCluster(cluster)
+      }));
+      
+      setClusters(extendedClusters);
     } catch (error) {
       console.error('Error loading topic clusters:', error);
     } finally {
@@ -54,8 +72,16 @@ export function TopicClusterMap({ projectId, clusterId, onCreateCluster }: Topic
   const loadCluster = async (id: string) => {
     try {
       setIsLoading(true);
-      const cluster = await TopicClusterService.getTopicCluster(id);
-      setSelectedCluster(cluster);
+      const clusterData = await TopicClusterService.getTopicCluster(id);
+      
+      // Transform the cluster data to include the properties needed for visualization
+      const extendedCluster: TopicCluster = {
+        ...clusterData,
+        main_topic: clusterData.name || clusterData.main_keyword,
+        subtopics: generateSubtopicsFromCluster(clusterData)
+      };
+      
+      setSelectedCluster(extendedCluster);
     } catch (error) {
       console.error('Error loading topic cluster:', error);
     } finally {
@@ -73,41 +99,28 @@ export function TopicClusterMap({ projectId, clusterId, onCreateCluster }: Topic
       // For now, we'll use a mock structure
       const newCluster = await TopicClusterService.createTopicCluster({
         project_id: projectId,
-        main_topic: mainKeyword.trim(),
-        subtopics: [
-          {
-            name: `${mainKeyword} guide`,
-            keywords: [`best ${mainKeyword}`, `${mainKeyword} tutorial`],
-            content_ideas: [
-              `Complete guide to ${mainKeyword}`,
-              `How to use ${mainKeyword} effectively`
-            ]
-          },
-          {
-            name: `${mainKeyword} examples`,
-            keywords: [`${mainKeyword} examples`, `${mainKeyword} case studies`],
-            content_ideas: [
-              `10 examples of ${mainKeyword} in action`,
-              `Case studies: ${mainKeyword} success stories`
-            ]
-          },
-          {
-            name: `${mainKeyword} tools`,
-            keywords: [`best ${mainKeyword} tools`, `${mainKeyword} software`],
-            content_ideas: [
-              `Top 5 tools for ${mainKeyword}`,
-              `${mainKeyword} software comparison`
-            ]
-          }
+        name: mainKeyword.trim(),
+        main_keyword: mainKeyword.trim(),
+        related_topics: [
+          `${mainKeyword} guide`,
+          `${mainKeyword} examples`,
+          `${mainKeyword} tools`
         ]
       });
       
-      setClusters(prevClusters => [...prevClusters, newCluster]);
-      setSelectedCluster(newCluster);
+      // Transform the cluster for visualization
+      const extendedCluster: TopicCluster = {
+        ...newCluster,
+        main_topic: newCluster.name || newCluster.main_keyword,
+        subtopics: generateSubtopicsFromCluster(newCluster)
+      };
+      
+      setClusters(prevClusters => [...prevClusters, extendedCluster]);
+      setSelectedCluster(extendedCluster);
       setMainKeyword('');
       
       if (onCreateCluster) {
-        onCreateCluster(newCluster);
+        onCreateCluster(extendedCluster);
       }
     } catch (error) {
       console.error('Error creating topic cluster:', error);
@@ -125,22 +138,32 @@ export function TopicClusterMap({ projectId, clusterId, onCreateCluster }: Topic
     
     // Set canvas size
     canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
+    canvas.height = 600; // Fixed height for better visualization
     
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Colors
-    const mainColor = '#3b82f6'; // blue
-    const subColor = '#60a5fa'; // lighter blue
-    const lineColor = '#93c5fd'; // even lighter blue
+    const mainColor = '#3b82f6'; // blue for main topic
+    const subColor = '#60a5fa'; // lighter blue for subtopics
+    const keywordColor = '#93c5fd'; // even lighter blue for keywords
+    const lineColor = '#dbeafe'; // very light blue for connections
+    const textColor = '#1e3a8a'; // dark blue for text
+    const shadowColor = 'rgba(0, 0, 0, 0.1)';
     
     // Calculate positions
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
-    const mainRadius = 80;
-    const subRadius = 60;
-    const distance = 200;
+    const mainRadius = 100;
+    const subRadius = 80;
+    const keywordRadius = 40;
+    const subTopicDistance = 250;
+    
+    // Draw shadow for main topic
+    ctx.beginPath();
+    ctx.arc(centerX + 5, centerY + 5, mainRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = shadowColor;
+    ctx.fill();
     
     // Draw main topic
     ctx.beginPath();
@@ -148,69 +171,223 @@ export function TopicClusterMap({ projectId, clusterId, onCreateCluster }: Topic
     ctx.fillStyle = mainColor;
     ctx.fill();
     
+    // Add fancy gradient to main topic
+    const gradient = ctx.createRadialGradient(
+      centerX - mainRadius/3, centerY - mainRadius/3, 0,
+      centerX, centerY, mainRadius
+    );
+    gradient.addColorStop(0, '#60a5fa');
+    gradient.addColorStop(1, '#3b82f6');
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, mainRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    
     // Draw main topic text
     ctx.fillStyle = 'white';
-    ctx.font = 'bold 16px Arial';
+    ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(selectedCluster.main_topic, centerX, centerY);
+    
+    // Handle long text by splitting it
+    const mainTopicText = selectedCluster.main_topic;
+    const words = mainTopicText.split(' ');
+    let line = '';
+    let lines = [];
+    
+    // Split text into lines that fit
+    for (let i = 0; i < words.length; i++) {
+      const testLine = line + words[i] + ' ';
+      const metrics = ctx.measureText(testLine);
+      const testWidth = metrics.width;
+      
+      if (testWidth > mainRadius * 1.5 && i > 0) {
+        lines.push(line);
+        line = words[i] + ' ';
+      } else {
+        line = testLine;
+      }
+    }
+    lines.push(line);
+    
+    // Draw each line
+    lines.forEach((line, index) => {
+      const lineOffset = (index - (lines.length - 1) / 2) * 24;
+      ctx.fillText(line.trim(), centerX, centerY + lineOffset);
+    });
     
     // Draw subtopics
     selectedCluster.subtopics.forEach((subtopic, index) => {
       // Calculate position in a circle around the main topic
-      const angle = (2 * Math.PI * index) / selectedCluster.subtopics.length;
-      const x = centerX + distance * Math.cos(angle);
-      const y = centerY + distance * Math.sin(angle);
+      const totalSubtopics = selectedCluster.subtopics.length;
+      const angle = (Math.PI * 2 * index) / totalSubtopics - Math.PI / 2;
+      const x = centerX + subTopicDistance * Math.cos(angle);
+      const y = centerY + subTopicDistance * Math.sin(angle);
       
-      // Draw line from main to subtopic
+      // Draw connection line from main to subtopic with curved path
       ctx.beginPath();
+      const midX = centerX + (x - centerX) / 2;
+      const midY = centerY + (y - centerY) / 2;
+      
+      // Add a slight curve to the connection line
+      const curveOffset = 30;
+      const curveX = midX + curveOffset * Math.cos(angle + Math.PI/2);
+      const curveY = midY + curveOffset * Math.sin(angle + Math.PI/2);
+      
       ctx.moveTo(centerX, centerY);
-      ctx.lineTo(x, y);
+      ctx.quadraticCurveTo(curveX, curveY, x, y);
       ctx.strokeStyle = lineColor;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;
       ctx.stroke();
       
-      // Draw subtopic circle
+      // Draw shadow for subtopic
+      ctx.beginPath();
+      ctx.arc(x + 5, y + 5, subRadius, 0, 2 * Math.PI);
+      ctx.fillStyle = shadowColor;
+      ctx.fill();
+      
+      // Draw subtopic with gradient
+      const subGradient = ctx.createRadialGradient(
+        x - subRadius/3, y - subRadius/3, 0,
+        x, y, subRadius
+      );
+      subGradient.addColorStop(0, '#93c5fd');
+      subGradient.addColorStop(1, '#60a5fa');
       ctx.beginPath();
       ctx.arc(x, y, subRadius, 0, 2 * Math.PI);
-      ctx.fillStyle = subColor;
+      ctx.fillStyle = subGradient;
       ctx.fill();
       
       // Draw subtopic text
       ctx.fillStyle = 'white';
-      ctx.font = 'bold 14px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 16px Arial';
       
-      // Split text into multiple lines if too long
-      const words = subtopic.name.split(' ');
-      let line = '';
-      let lines = [];
-      let y_offset = 0;
+      // Split subtopic name into lines
+      const subWords = subtopic.name.split(' ');
+      let subLine = '';
+      let subLines = [];
       
-      for (let i = 0; i < words.length; i++) {
-        const testLine = line + words[i] + ' ';
+      for (let i = 0; i < subWords.length; i++) {
+        const testLine = subLine + subWords[i] + ' ';
         const metrics = ctx.measureText(testLine);
         const testWidth = metrics.width;
         
         if (testWidth > subRadius * 1.5 && i > 0) {
-          lines.push(line);
-          line = words[i] + ' ';
+          subLines.push(subLine);
+          subLine = subWords[i] + ' ';
         } else {
-          line = testLine;
+          subLine = testLine;
         }
       }
-      lines.push(line);
+      subLines.push(subLine);
       
       // Draw each line
-      lines.forEach((line, i) => {
-        ctx.fillText(line.trim(), x, y - 10 + i * 20);
+      subLines.forEach((line, i) => {
+        const lineOffset = (i - (subLines.length - 1) / 2) * 20;
+        ctx.fillText(line.trim(), x, y + lineOffset);
       });
       
       // Draw small indicator for number of keywords
-      ctx.font = '12px Arial';
-      ctx.fillText(`${subtopic.keywords.length} keywords`, x, y + subRadius + 15);
+      ctx.font = '13px Arial';
+      ctx.fillStyle = 'white';
+      ctx.fillText(`${subtopic.keywords.length} keywords`, x, y + subRadius - 18);
+      
+      // Draw small indicator for number of content ideas
+      ctx.fillText(`${subtopic.content_ideas.length} content ideas`, x, y + subRadius - 2);
+      
+      // Draw keywords around subtopic for important ones (limit to 3)
+      const displayKeywords = subtopic.keywords.slice(0, 3);
+      displayKeywords.forEach((keyword, kIndex) => {
+        // Calculate keyword position
+        const keywordAngle = (Math.PI * 2 * kIndex) / displayKeywords.length;
+        const keywordDistance = subRadius + 60;
+        const kx = x + keywordDistance * Math.cos(keywordAngle);
+        const ky = y + keywordDistance * Math.sin(keywordAngle);
+        
+        // Draw keyword bubble
+        ctx.beginPath();
+        ctx.arc(kx, ky, keywordRadius, 0, 2 * Math.PI);
+        ctx.fillStyle = keywordColor;
+        ctx.fill();
+        
+        // Draw keyword text
+        ctx.fillStyle = textColor;
+        ctx.font = '12px Arial';
+        
+        // Handle long keywords
+        const keywordWords = keyword.split(' ');
+        let keywordLine = '';
+        let keywordLines = [];
+        
+        for (let i = 0; i < keywordWords.length; i++) {
+          const testLine = keywordLine + keywordWords[i] + ' ';
+          const metrics = ctx.measureText(testLine);
+          const testWidth = metrics.width;
+          
+          if (testWidth > keywordRadius * 1.5 && i > 0) {
+            keywordLines.push(keywordLine);
+            keywordLine = keywordWords[i] + ' ';
+          } else {
+            keywordLine = testLine;
+          }
+        }
+        keywordLines.push(keywordLine);
+        
+        // Draw each keyword line
+        keywordLines.forEach((line, i) => {
+          const lineOffset = (i - (keywordLines.length - 1) / 2) * 16;
+          ctx.fillText(line.trim(), kx, ky + lineOffset);
+        });
+        
+        // Draw connection line from subtopic to keyword
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(kx, ky);
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
     });
+  };
+
+  // Helper function to generate subtopics from cluster data
+  const generateSubtopicsFromCluster = (cluster: BaseTopicCluster) => {
+    // If related_topics is available, use it to generate subtopics
+    if (cluster.related_topics && cluster.related_topics.length > 0) {
+      return cluster.related_topics.map(topic => ({
+        name: topic,
+        keywords: [topic, `${topic} guide`, `${topic} examples`],
+        content_ideas: [`Complete guide to ${topic}`, `Best practices for ${topic}`]
+      }));
+    }
+    
+    // If no related topics, create default subtopics based on main keyword
+    return [
+      {
+        name: `${cluster.main_keyword} guide`,
+        keywords: [`best ${cluster.main_keyword}`, `${cluster.main_keyword} tutorial`],
+        content_ideas: [
+          `Complete guide to ${cluster.main_keyword}`,
+          `How to use ${cluster.main_keyword} effectively`
+        ]
+      },
+      {
+        name: `${cluster.main_keyword} examples`,
+        keywords: [`${cluster.main_keyword} examples`, `${cluster.main_keyword} case studies`],
+        content_ideas: [
+          `10 examples of ${cluster.main_keyword} in action`,
+          `Case studies: ${cluster.main_keyword} success stories`
+        ]
+      },
+      {
+        name: `${cluster.main_keyword} tools`,
+        keywords: [`best ${cluster.main_keyword} tools`, `${cluster.main_keyword} software`],
+        content_ideas: [
+          `Top 5 tools for ${cluster.main_keyword}`,
+          `${cluster.main_keyword} software comparison`
+        ]
+      }
+    ];
   };
 
   return (

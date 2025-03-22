@@ -7,13 +7,18 @@ const protectedPaths = ['/dashboard', '/api/protected'];
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   
+  // Add fallback session header to prevent client errors
+  // This is just to prevent hydration errors, not for actual authentication
+  const response = NextResponse.next();
+  response.headers.set('x-session-fallback', 'true');
+  
   // Check if the path is protected
   const isProtectedPath = protectedPaths.some(protectedPath => 
     path === protectedPath || path.startsWith(`${protectedPath}/`)
   );
   
   if (!isProtectedPath) {
-    return NextResponse.next();
+    return response;
   }
   
   // Get the user's session token
@@ -29,7 +34,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
   
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
@@ -38,7 +43,7 @@ export const config = {
     '/dashboard/:path*',
     '/api/protected/:path*',
     
-    // Exclude the following paths
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    // Exclude these paths from processing
+    '/((?!_next/static|_next/image|api/auth|favicon.ico|public).*)',
   ],
 }; 

@@ -283,6 +283,28 @@ export const ContentAnalysisService = {
     return data || [];
   },
 
+  async getLatestContentAnalysis(contentPageId: string) {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('content_analysis')
+      .select('*')
+      .eq('content_page_id', contentPageId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No content analysis found
+        return null;
+      }
+      console.error('Error fetching latest content analysis:', error);
+      throw error;
+    }
+
+    return data;
+  },
+
   async createContentAnalysis(data: Omit<ContentAnalysisTable, 'id' | 'created_at'>) {
     const supabase = createClient();
     const { data: newAnalysis, error } = await supabase
@@ -297,18 +319,40 @@ export const ContentAnalysisService = {
     }
 
     return newAnalysis;
+  },
+
+  async updateAnalysisWithSuggestions(analysisId: string, suggestions: any[]) {
+    const supabase = createClient();
+    
+    // First insert all the suggestions
+    const { data: newSuggestions, error: suggestionsError } = await supabase
+      .from('content_suggestions')
+      .insert(suggestions.map(suggestion => ({
+        content_analysis_id: analysisId,
+        type: suggestion.type,
+        suggestion: suggestion.suggestion,
+        implemented: false
+      })))
+      .select();
+
+    if (suggestionsError) {
+      console.error('Error creating content suggestions:', suggestionsError);
+      throw suggestionsError;
+    }
+
+    return newSuggestions;
   }
 };
 
 // Content Suggestion Service
 export const ContentSuggestionService = {
-  async getContentSuggestions(contentAnalysisId: string) {
+  async getSuggestions(analysisId: string) {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('content_suggestions')
       .select('*')
-      .eq('content_analysis_id', contentAnalysisId)
-      .order('created_at', { ascending: true });
+      .eq('content_analysis_id', analysisId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching content suggestions:', error);
@@ -318,37 +362,164 @@ export const ContentSuggestionService = {
     return data || [];
   },
 
-  async createContentSuggestion(data: Omit<ContentSuggestionTable, 'id' | 'created_at' | 'updated_at'>) {
+  async implementSuggestion(suggestionId: string) {
     const supabase = createClient();
-    const { data: newSuggestion, error } = await supabase
+    const { data, error } = await supabase
       .from('content_suggestions')
-      .insert([data])
+      .update({ implemented: true })
+      .eq('id', suggestionId)
       .select()
       .single();
 
     if (error) {
-      console.error('Error creating content suggestion:', error);
+      console.error('Error implementing suggestion:', error);
       throw error;
     }
 
-    return newSuggestion;
+    return data;
   },
 
-  async updateContentSuggestion(id: string, implemented: boolean) {
+  async rejectSuggestion(suggestionId: string) {
     const supabase = createClient();
-    const { data: updatedSuggestion, error } = await supabase
+    const { data, error } = await supabase
       .from('content_suggestions')
-      .update({ implemented })
-      .eq('id', id)
+      .update({ 
+        implemented: false,
+        rejected: true 
+      })
+      .eq('id', suggestionId)
       .select()
       .single();
 
     if (error) {
-      console.error('Error updating content suggestion:', error);
+      console.error('Error rejecting suggestion:', error);
       throw error;
     }
 
-    return updatedSuggestion;
+    return data;
+  }
+};
+
+// Content Performance Service
+export const ContentPerformanceService = {
+  async getContentPerformance(contentPageId: string, days: number = 30) {
+    // In a real implementation, this would fetch performance metrics from a database
+    // For now, we'll generate mock performance data
+    
+    // Generate some mock data
+    const today = new Date();
+    const data = Array.from({ length: days }, (_, i) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (days - i - 1));
+      
+      // Generate semi-realistic numbers with some randomness and trends
+      const impressions = Math.floor(50 + Math.random() * 50 + i * 2);
+      const clicks = Math.floor(impressions * (0.05 + Math.random() * 0.03));
+      const position = Math.max(1, Math.min(10, 4 - (i * 0.1) + Math.random() * 2));
+      
+      return {
+        date: date.toISOString().split('T')[0],
+        impressions,
+        clicks,
+        position,
+        ctr: clicks / impressions
+      };
+    });
+    
+    return data;
+  },
+  
+  async getContentPerformanceSummary(contentPageId: string, days: number = 30) {
+    // Get the detailed performance data
+    const performanceData = await this.getContentPerformance(contentPageId, days);
+    
+    // Calculate summary metrics
+    const totalImpressions = performanceData.reduce((sum, day) => sum + day.impressions, 0);
+    const totalClicks = performanceData.reduce((sum, day) => sum + day.clicks, 0);
+    const averageCtr = totalClicks / totalImpressions;
+    const averagePosition = performanceData.reduce((sum, day) => sum + day.position, 0) / performanceData.length;
+    
+    return {
+      totalImpressions,
+      totalClicks,
+      averageCtr,
+      averagePosition,
+      period: days
+    };
+  }
+};
+
+// Content Gap Analysis Service
+export const ContentGapService = {
+  async analyzeContentGaps(contentPageId: string, competitorUrls: string[] = []) {
+    // In a real implementation, this would analyze competitor content
+    // For now, we'll return mock data
+    
+    // Get the content page
+    const contentPage = await ContentPageService.getContentPage(contentPageId);
+    const keyword = contentPage.title || 'content marketing';
+    
+    // Generate mock gap analysis
+    return {
+      missingKeywords: [
+        `${keyword} statistics`,
+        `${keyword} examples`,
+        `${keyword} case studies`,
+        `${keyword} tools`
+      ],
+      missingTopics: [
+        `How to measure ${keyword} success`,
+        `${keyword} best practices`,
+        `${keyword} challenges and solutions`,
+      ],
+      contentGaps: [
+        {
+          topic: `${keyword} ROI calculation`,
+          importance: 8,
+          suggestedContent: `Add a section explaining how to calculate and measure ROI for ${keyword} initiatives, with examples and formulas.`
+        },
+        {
+          topic: `${keyword} industry benchmarks`,
+          importance: 7,
+          suggestedContent: `Include industry benchmarks and statistics to help readers understand what good performance looks like.`
+        },
+        {
+          topic: `${keyword} tools comparison`,
+          importance: 6,
+          suggestedContent: `Create a comparison table of top tools for ${keyword} with features, pricing, and pros/cons.`
+        }
+      ],
+      competitors: competitorUrls.map((url, index) => ({
+        url,
+        title: `Competitor ${index + 1}: ${keyword} Guide`,
+        wordCount: [1200, 1500, 1800, 2000][index % 4],
+        uniqueTopics: [`${keyword} ROI`, `${keyword} tools`, `${keyword} examples`, `${keyword} trends`].slice(0, 2 + index % 2),
+        strengths: [`Comprehensive coverage`, `Case studies`, `Visual examples`, `Expert quotes`].slice(0, 2 + index % 2)
+      }))
+    };
+  },
+  
+  async getCompetitorContent(url: string) {
+    // In a real implementation, this would fetch and parse competitor content
+    // For now, we'll return mock content
+    return {
+      url,
+      title: `Competitor Guide to Content Marketing`,
+      content: `This is a mock representation of competitor content that would be fetched and analyzed in a real implementation.`,
+      wordCount: 1500 + Math.floor(Math.random() * 1000),
+      keywordDensity: 0.02 + (Math.random() * 0.015)
+    };
+  },
+  
+  async addCompetitor(contentPageId: string, competitorUrl: string) {
+    // In a real implementation, this would store the competitor URL in a database
+    // For now, we'll just return a mock response
+    return {
+      id: `comp-${Date.now()}`,
+      content_page_id: contentPageId,
+      url: competitorUrl,
+      analyzed_at: new Date().toISOString()
+    };
   }
 };
 
