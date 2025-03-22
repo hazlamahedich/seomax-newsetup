@@ -97,11 +97,18 @@ SEOMax follows a modern web application architecture with these key components:
    - ContentPagesPage → ContentDetail → ContentAnalysis
    - CompetitorAnalysisPage → CompetitorDetail → CompetitorAnalysis
 
-4. **Service Architecture**:
+4. **Backlink Analysis Flow**:
+   - BacklinksLayout → TabNavigation → Overview/Analysis/Competitors/Reports
+   - BacklinksPage → BacklinkMetrics → BacklinkTable
+   - BacklinkAnalysisPage → Charts → DetailedBacklinkTable
+   - AddBacklinkPage → AddBacklinkForm → BacklinkService
+
+5. **Service Architecture**:
    - ContentPageService → Database Operations → UI Components
    - CompetitorService → Database Operations → UI Components
+   - BacklinkService → Database Operations → UI Components
    - Analysis Services → Data Processing → Visualization Components
 
-5. **Navigation Structure**:
+6. **Navigation Structure**:
    - Breadcrumb → Section Tabs → Content Area
    - Content Listing → Content Detail → Analysis 

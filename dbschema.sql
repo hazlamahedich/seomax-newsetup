@@ -102,6 +102,57 @@ CREATE TABLE public.content_briefs (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create backlinks table for tracking discovered backlinks
+CREATE TABLE public.backlinks (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  project_id uuid REFERENCES public.projects(id) ON DELETE CASCADE,
+  source_url TEXT NOT NULL,
+  target_url TEXT NOT NULL,
+  anchor_text TEXT,
+  link_type TEXT NOT NULL DEFAULT 'external', -- 'external', 'internal', 'nofollow'
+  page_authority DECIMAL(5,2),
+  domain_authority DECIMAL(5,2),
+  first_discovered TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  last_checked TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  status TEXT NOT NULL DEFAULT 'active' -- 'active', 'broken', 'removed'
+);
+
+-- Create backlink_analysis table for storing backlink metrics
+CREATE TABLE public.backlink_analysis (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  project_id uuid REFERENCES public.projects(id) ON DELETE CASCADE,
+  total_backlinks INTEGER DEFAULT 0,
+  unique_domains INTEGER DEFAULT 0,
+  average_domain_authority DECIMAL(5,2),
+  backlinks_by_type JSONB, -- Distribution of backlink types
+  top_anchor_texts JSONB, -- Most common anchor texts
+  analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create backlink_reports table for scheduled and on-demand reports
+CREATE TABLE public.backlink_reports (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  project_id uuid REFERENCES public.projects(id) ON DELETE CASCADE,
+  report_name TEXT NOT NULL,
+  report_data JSONB NOT NULL,
+  created_by uuid REFERENCES auth.users(id),
+  schedule TEXT, -- 'daily', 'weekly', 'monthly', 'once'
+  next_run TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create competitor_backlinks table for tracking competitor backlinks
+CREATE TABLE public.competitor_backlinks (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  project_id uuid REFERENCES public.projects(id) ON DELETE CASCADE,
+  competitor_url TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  anchor_text TEXT,
+  page_authority DECIMAL(5,2),
+  domain_authority DECIMAL(5,2),
+  discovered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Set up RLS (Row Level Security)
 -- Enable RLS on projects
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
@@ -188,6 +239,50 @@ ALTER TABLE public.content_briefs ENABLE ROW LEVEL SECURITY;
 -- Create policy for users to see only their own content briefs
 CREATE POLICY content_briefs_user_policy 
   ON public.content_briefs 
+  FOR ALL
+  USING (project_id IN (
+    SELECT id FROM public.projects WHERE user_id = auth.uid()
+  ));
+
+-- Enable RLS on backlinks
+ALTER TABLE public.backlinks ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for users to see only their own backlinks
+CREATE POLICY backlinks_user_policy 
+  ON public.backlinks 
+  FOR ALL
+  USING (project_id IN (
+    SELECT id FROM public.projects WHERE user_id = auth.uid()
+  ));
+
+-- Enable RLS on backlink_analysis
+ALTER TABLE public.backlink_analysis ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for users to see only their own backlink analysis
+CREATE POLICY backlink_analysis_user_policy 
+  ON public.backlink_analysis 
+  FOR ALL
+  USING (project_id IN (
+    SELECT id FROM public.projects WHERE user_id = auth.uid()
+  ));
+
+-- Enable RLS on backlink_reports
+ALTER TABLE public.backlink_reports ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for users to see only their own backlink reports
+CREATE POLICY backlink_reports_user_policy 
+  ON public.backlink_reports 
+  FOR ALL
+  USING (project_id IN (
+    SELECT id FROM public.projects WHERE user_id = auth.uid()
+  ));
+
+-- Enable RLS on competitor_backlinks
+ALTER TABLE public.competitor_backlinks ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for users to see only their own competitor backlinks
+CREATE POLICY competitor_backlinks_user_policy 
+  ON public.competitor_backlinks 
   FOR ALL
   USING (project_id IN (
     SELECT id FROM public.projects WHERE user_id = auth.uid()

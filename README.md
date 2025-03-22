@@ -1,64 +1,93 @@
-# SEOMax - AI-Powered SEO Platform
+# SEOMax - AI-Powered SEO Optimization Platform
 
-SEOMax is a modern web application built to help users optimize their websites for search engines using AI-powered analysis and recommendations.
+A Next.js application that leverages AI to provide comprehensive SEO analysis, content optimization, and backlink management.
 
 ## Features
 
-- **User Authentication**: Secure signup, login, and account management
-- **Project Management**: Create and manage multiple projects for different websites
-- **Content Analysis**: Analyze website content for readability, keywords, and structure
-- **Content Page Management**: Add and analyze individual pages from your website
-- **Competitor Analysis**: Compare your content against competitors
-- **Content Optimization**: Get AI-powered suggestions to improve your content
-- **Content Briefs**: Create and manage content briefs for new articles
+### Core SEO Analysis
+- Website performance analysis
+- Keyword research and planning
+- On-page SEO optimization suggestions
 
-## Tech Stack
+### Content Management & Optimization
+- Content quality analysis
+- Readability scoring
+- Keyword usage optimization
+- Competitor content analysis
+- Content brief generation
 
-- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
-- **UI Components**: shadcn/ui component library
-- **Authentication**: Supabase Auth
-- **Database**: PostgreSQL (via Supabase)
-- **State Management**: Server components with dynamic rendering
-- **Styling**: Tailwind CSS with custom theming
-- **Deployment**: Vercel
+### Backlink Analysis & Management
+- Backlink tracking and monitoring
+- Backlink quality scoring
+- Competitor backlink gap analysis
+- Automated report generation
+- Backlink visualization dashboards
+- Scheduled reporting capabilities
+
+### Technical Infrastructure
+- Next.js 14+ with App Router
+- Supabase for authentication and data storage
+- Tailwind CSS with shadcn/ui components
+- React Query for data fetching
+- Zustand for state management
+- Framer Motion for animations
+
+## Project Structure
+
+```
+src/
+├── app/                  # Next.js App Router pages
+│   ├── api/              # API routes
+│   ├── auth/             # Authentication pages
+│   ├── dashboard/        # Dashboard pages for SEO tools
+│   │   ├── content/      # Content management section
+│   │   ├── backlinks/    # Backlink analysis section
+│   │   └── keywords/     # Keyword research section
+│   └── page.tsx          # Homepage
+├── components/           # React components
+│   ├── ui/               # UI components from shadcn
+│   ├── content/          # Content-related components
+│   ├── backlinks/        # Backlink-related components
+│   └── auth/             # Authentication components
+├── lib/                  # Utility libraries
+│   ├── services/         # Service classes for data operations
+│   ├── supabase/         # Supabase client setup
+│   ├── store/            # Zustand state management
+│   └── types/            # TypeScript type definitions
+└── styles/               # Global styles
+```
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js 16.8 or later
-- npm or yarn
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/seomax.git
-cd seomax
-```
-
+1. Clone the repository
 2. Install dependencies:
-```bash
-npm install
-# or
-yarn install
-```
-
+   ```
+   npm install
+   ```
 3. Set up environment variables:
-Create a `.env.local` file in the root directory with the following variables:
-```
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+   ```
 4. Run the development server:
-```bash
-npm run dev
-# or
-yarn dev
-```
+   ```
+   npm run dev
+   ```
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-5. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+## Development Status
+
+- ✅ Project setup and configuration
+- ✅ Authentication system
+- ✅ Database schema design
+- ✅ Content management features
+- ✅ Content analysis components
+- ✅ Backlink analysis and tracking
+- ✅ Competitor backlink gap analysis
+- ✅ Automated report generation
+- 🔄 UI enhancements and animations
+- 🔄 Natural language query interface
+- 🔄 Comprehensive help system
 
 ## Project Structure
 
