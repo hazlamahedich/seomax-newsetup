@@ -1,7 +1,7 @@
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react';
-import { signIn as supabaseSignIn, signOut as supabaseSignOut, signUp as supabaseSignUp } from '../lib/auth/auth-service';
+import { signIn as supabaseSignIn, signOut as supabaseSignOut, signUp as supabaseSignUp } from '@/lib/auth/auth-service';
 
-export function useAuth() {
+export function useAuthHook() {
   const { data: session, status } = useSession();
   const loading = status === 'loading';
   

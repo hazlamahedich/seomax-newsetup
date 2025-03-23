@@ -1,115 +1,104 @@
 'use client';
 
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/useAuth";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthHook } from '@/hooks/auth-hooks';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
   const router = useRouter();
-  const { signIn } = useAuth();
-
+  const { signIn } = useAuthHook();
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!email || !password) {
-      setError('Please enter both email and password');
-      return;
-    }
+    setIsLoading(true);
+    setError(null);
     
     try {
-      setLoading(true);
-      setError('');
+      const result = await signIn(email, password);
       
-      const { error } = await signIn(email, password);
-      
-      if (error) {
-        setError(error.message);
-        return;
+      if (result.error) {
+        setError(result.error.message);
+      } else {
+        // Redirect to dashboard on successful login
+        router.push('/dashboard');
       }
-      
-      router.push('/dashboard');
     } catch (err) {
-      setError('An unexpected error occurred');
+      setError('An unexpected error occurred. Please try again.');
       console.error(err);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
-
+  
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="border-b">
-        <div className="container flex h-16 items-center">
-          <Link href="/" className="font-bold text-2xl">
-            SEOMax
-          </Link>
+    <div className="flex min-h-screen flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-md">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Welcome Back</h1>
+          <p className="text-sm text-gray-600">Sign in to your account</p>
         </div>
-      </header>
-
-      <main className="flex-1 flex items-center justify-center p-6">
-        <div className="mx-auto w-full max-w-md space-y-6">
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold">Welcome back</h1>
-            <p className="text-muted-foreground">Enter your credentials to sign in</p>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+            />
           </div>
-
-          <div className="border rounded-lg p-6 shadow-sm bg-background">
-            {error && (
-              <div className="mb-4 p-3 rounded bg-destructive/10 text-destructive text-sm">
-                {error}
-              </div>
-            )}
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full p-2 border rounded-md"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full p-2 border rounded-md"
-                />
-              </div>
-              
-              <Button className="w-full" type="submit" disabled={loading}>
-                {loading ? 'Signing in...' : 'Sign in'}
-              </Button>
-            </form>
-            
-            <div className="mt-4 text-center text-sm">
-              Don't have an account?{" "}
-              <Link href="/signup" className="text-primary hover:underline">
-                Sign up
+          
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <Link href="/forgot-password" className="text-sm text-blue-600 hover:underline">
+                Forgot password?
               </Link>
             </div>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
           </div>
-        </div>
-      </main>
+          
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={isLoading}
+          >
+            {isLoading ? 'Signing in...' : 'Sign in'}
+          </Button>
+          
+          <div className="text-center text-sm">
+            Don't have an account?{' '}
+            <Link href="/signup" className="text-blue-600 hover:underline">
+              Create one now
+            </Link>
+          </div>
+        </form>
+      </div>
     </div>
   );
 } 

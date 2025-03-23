@@ -1,19 +1,21 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import type { DefaultSession, NextAuthConfig } from "next-auth";
+import type { NextAuthOptions } from "next-auth";
+import type { User } from "next-auth";
 import { z } from "zod";
 import { signIn } from "@/lib/auth/auth-service";
 
 // Extend the built-in session types
 declare module "next-auth" {
-  interface Session extends DefaultSession {
+  interface Session {
     user: {
       id: string;
-    } & DefaultSession["user"];
+    } & User;
   }
 }
 
-export const authOptions: NextAuthConfig = {
+// Define authentication options
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -53,17 +55,24 @@ export const authOptions: NextAuthConfig = {
   pages: {
     signIn: '/login',
     signOut: '/',
-    error: '/login',
+    error: '/api/auth/error',
   },
   callbacks: {
     async session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = token.sub as string;
+      if (session.user && token.sub) {
+        session.user.id = token.sub;
       }
       return session;
     },
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    }
   },
-}
+};
 
+// Export the NextAuth handler
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST }; 

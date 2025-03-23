@@ -37,13 +37,11 @@ export async function middleware(req: NextRequest) {
   return response;
 }
 
+// Simplify the matcher to avoid infinite loops
 export const config = {
   matcher: [
-    // Protect these paths
+    // Only protect these specific paths
     '/dashboard/:path*',
     '/api/protected/:path*',
-    
-    // Exclude these paths from processing
-    '/((?!_next/static|_next/image|api/auth|favicon.ico|public).*)',
   ],
 }; 
