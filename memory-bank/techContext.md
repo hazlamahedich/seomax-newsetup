@@ -3,30 +3,161 @@
 ## Technologies Used
 
 ### Frontend
-- **React 19**: UI library
-- **Next.js 15** (App Router): Framework for server-rendered React applications
-- **TypeScript**: Type-safe JavaScript
-- **Tailwind CSS**: Utility-first CSS framework
-- **shadcn/ui**: Unstyled UI components built on Radix UI
-- **Zustand**: Lightweight state management
-- **Tanstack React Query**: Data fetching and caching
-- **Framer Motion**: Animations
-- **Recharts/D3**: Data visualization
+- **Next.js 15+**: Using the App Router for improved performance and routing capabilities
+- **React 18**: For component-based UI development with the latest features
+- **TypeScript**: For type safety across the codebase
+- **Tailwind CSS**: For utility-first styling
+- **shadcn/ui**: For high-quality UI components with Tailwind integration
+- **Framer Motion**: For smooth animations and transitions
+- **Recharts**: For data visualization
+- **Zustand**: For client-side state management
+- **React Query**: For server state management and data fetching
+- **Axios**: For HTTP requests with consistent error handling
 
 ### Backend
-- **Next.js API Routes**: Backend API endpoints
-- **Supabase**: Database, authentication, and storage
-- **LangChain**: Framework for developing AI-powered applications
-- **GPT Models**: Content analysis and recommendations
+- **Supabase**: For authentication, database, and storage
+  - PostgreSQL: For relational data storage
+  - Row-Level Security (RLS): For fine-grained data access control
+  - Supabase Pooler: For high-traffic database connections 
+- **Next.js API Routes**: For serverless API endpoints
+- **Edge Functions**: For global low-latency functionality
+
+### AI and Analysis
+- **LangChain**: For AI orchestration and prompt management
+- **OpenAI**: For content analysis and optimization suggestions
+- **Node.js Workers**: For background processing of SEO analysis tasks
 
 ### Testing
-- **Jest**: Unit and integration testing
-- **React Testing Library**: Component testing
-- **Playwright**: End-to-end testing
-  - Used for browser automation and user journey validation
-  - Support for multiple browsers (Chromium, Firefox, WebKit)
-  - Visual testing capabilities
-  - Authentication testing
+- **Jest**: For unit and integration testing
+- **React Testing Library**: For component testing
+- **Playwright**: For end-to-end testing
+- **Storybook**: For component documentation and visual testing
+- **MSW (Mock Service Worker)**: For API mocking
+
+### DevOps
+- **GitHub Actions**: For CI/CD pipelines
+- **Vercel**: For hosting and deployment
+- **Docker**: For containerized development and testing
+
+## Development Setup
+
+### Environment Variables
+```
+NEXT_PUBLIC_SUPABASE_URL=<your-supabase-url>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
+NEXT_PUBLIC_SUPABASE_POOLER_URL=<your-supabase-pooler-url>
+OPENAI_API_KEY=<your-openai-api-key>
+NEXT_PUBLIC_SITE_URL=<your-site-url>
+```
+
+### Database Schema
+The main tables in our Supabase database:
+- **users**: User profiles and preferences
+- **websites**: Websites being analyzed
+- **pages**: Individual pages within websites
+- **seo_audits**: SEO audit results
+- **content_analyses**: Content analysis results
+- **keywords**: Tracked keywords and rankings
+- **user_feedback**: Feedback submitted by users
+
+### Performance Considerations
+- Use of connection pooling for database performance under load
+- Implementation of optimistic updates for responsive UI
+- Strategic use of React Query for caching and revalidation
+- Incremental Static Regeneration for frequently accessed pages
+- Edge functions for global low-latency operations
+- Proper indexing on database tables for query performance
+
+## Technical Constraints
+
+### Supabase Integration
+- Authentication tied to Supabase Auth
+- Database operations follow Supabase patterns and constraints
+- RLS policies must be carefully designed for security
+- Session pooler requires proper connection management
+
+### Browser Compatibility
+- Support for modern browsers (Chrome, Firefox, Safari, Edge)
+- Progressive enhancement for older browsers
+- Mobile-first approach for responsive design
+
+### Performance Requirements
+- Page load times under 1.5 seconds
+- Time to Interactive under 3 seconds
+- Lighthouse score above 90 for all categories
+- Smooth animations (60fps)
+
+### AI Integration
+- Rate limiting for API calls to OpenAI
+- Fallback mechanisms for AI service interruptions
+- Caching of AI responses when appropriate
+
+## Data Flow Architecture
+
+### Content Analysis Flow
+1. User submits content for analysis
+2. Content is processed through various analysis engines:
+   - Readability analysis
+   - Keyword usage analysis
+   - Structure analysis
+   - Competitor analysis
+3. Results are stored in the database
+4. UI updates with analysis results and recommendations
+
+### SEO Audit Flow
+1. User adds a website for analysis
+2. Site crawler discovers pages and structure
+3. Each page is analyzed for technical SEO factors
+4. Results are aggregated and stored
+5. UI displays issues and recommendations
+
+### Feedback System Flow
+1. User submits feedback through the feedback dialog
+2. Feedback is stored in the database with user information
+3. Admin users can review and manage feedback
+4. Feedback statistics are calculated for administrative overview
+
+## Dependencies
+Major dependencies and their purposes:
+
+```json
+{
+  "dependencies": {
+    "@radix-ui/react-icons": "For accessible icons",
+    "@supabase/auth-helpers-nextjs": "For Supabase auth integration",
+    "@supabase/supabase-js": "For Supabase client operations",
+    "axios": "For HTTP requests",
+    "class-variance-authority": "For component styling variants",
+    "clsx": "For conditional class names",
+    "framer-motion": "For animations",
+    "langchain": "For AI orchestration",
+    "lucide-react": "For icon set",
+    "next": "React framework",
+    "react": "UI library",
+    "react-dom": "DOM rendering for React",
+    "react-query": "For data fetching and caching",
+    "recharts": "For data visualization",
+    "tailwind-merge": "For Tailwind class merging",
+    "tailwindcss-animate": "For Tailwind animations",
+    "zustand": "For state management"
+  },
+  "devDependencies": {
+    "@playwright/test": "For E2E testing",
+    "@testing-library/jest-dom": "For DOM testing utilities",
+    "@testing-library/react": "For React component testing",
+    "@types/node": "TypeScript definitions",
+    "@types/react": "TypeScript definitions",
+    "autoprefixer": "For CSS compatibility",
+    "eslint": "For code linting",
+    "eslint-config-next": "ESLint Next.js config",
+    "jest": "For unit testing",
+    "msw": "For API mocking",
+    "postcss": "For CSS processing",
+    "tailwindcss": "For utility CSS",
+    "typescript": "For type checking"
+  }
+}
+```
 
 ## Development Setup
 

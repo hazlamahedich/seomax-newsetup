@@ -135,6 +135,21 @@ CREATE TABLE IF NOT EXISTS seomax.competitor_content (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Create user_feedback table for collecting user feedback
+CREATE TABLE IF NOT EXISTS seomax.user_feedback (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  feedback_type TEXT NOT NULL, -- 'feature_request', 'bug_report', 'general', 'usability', 'satisfaction'
+  subject TEXT NOT NULL,
+  content TEXT NOT NULL,
+  rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+  location TEXT, -- Which page/feature the feedback is about
+  status TEXT DEFAULT 'new', -- 'new', 'in_review', 'planned', 'implemented', 'declined'
+  admin_response TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Enable row level security on all tables
 ALTER TABLE seomax.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE seomax.projects ENABLE ROW LEVEL SECURITY;
@@ -147,6 +162,7 @@ ALTER TABLE seomax.content_suggestions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE seomax.topic_clusters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE seomax.content_briefs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE seomax.competitor_content ENABLE ROW LEVEL SECURITY;
+ALTER TABLE seomax.user_feedback ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for profiles
 CREATE POLICY "Users can view own profile" 
@@ -299,6 +315,19 @@ CREATE POLICY "Users can create own competitor content"
   ON seomax.competitor_content FOR INSERT 
   WITH CHECK (auth.uid() = (SELECT user_id FROM seomax.projects WHERE id = project_id));
 
+-- Create policies for user_feedback
+CREATE POLICY "Users can view own feedback" 
+  ON seomax.user_feedback FOR SELECT 
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create feedback" 
+  ON seomax.user_feedback FOR INSERT 
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own feedback" 
+  ON seomax.user_feedback FOR UPDATE 
+  USING (auth.uid() = user_id);
+
 -- Create indexes for better performance
 CREATE INDEX idx_projects_user_id ON seomax.projects(user_id);
 CREATE INDEX idx_keywords_project_id ON seomax.keywords(project_id);
@@ -313,6 +342,8 @@ CREATE INDEX idx_topic_clusters_project_id ON seomax.topic_clusters(project_id);
 CREATE INDEX idx_content_briefs_project_id ON seomax.content_briefs(project_id);
 CREATE INDEX idx_content_briefs_topic_cluster_id ON seomax.content_briefs(topic_cluster_id);
 CREATE INDEX idx_competitor_content_project_id ON seomax.competitor_content(project_id);
+CREATE INDEX idx_competitor_content_competitor_url ON seomax.competitor_content(competitor_url);
+CREATE INDEX idx_user_feedback_user_id ON seomax.user_feedback(user_id);
 
 -- Create functions for profile management
 CREATE OR REPLACE FUNCTION public.handle_new_user() 

@@ -1,81 +1,74 @@
-import { useState, useEffect, createContext, useContext } from 'react';
-import { createClient, User } from '@supabase/supabase-js';
+'use client';
 
-// Create a Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase/client';
+import { User } from '@supabase/supabase-js';
 
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signOut: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    // Get initial user
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      setLoading(false);
-    };
+    // Get current session
+    const fetchUser = async () => {
+      try {
+        setLoading(true);
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          throw error;
+        }
 
-    getUser();
-
-    // Set up auth state listener
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
         setUser(session?.user || null);
+
+        // Set up auth state listener
+        const { data: authListener } = supabase.auth.onAuthStateChange(
+          (event, session) => {
+            setUser(session?.user || null);
+          }
+        );
+
+        return () => {
+          authListener.subscription.unsubscribe();
+        };
+      } catch (err) {
+        console.error('Error fetching auth user:', err);
+        setError(err instanceof Error ? err : new Error('Unknown error occurred'));
+      } finally {
         setLoading(false);
       }
-    );
-
-    return () => {
-      authListener.subscription.unsubscribe();
     };
+
+    fetchUser();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      return { error };
-    } catch (error) {
-      return { error: error as Error };
+      setLoading(true);
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        throw error;
+      }
+    } catch (err) {
+      console.error('Error signing out:', err);
+      setError(err instanceof Error ? err : new Error('Unknown error occurred'));
+    } finally {
+      setLoading(false);
     }
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
+  const isAdmin = () => {
+    // Implement admin role checking - could be based on user metadata or a separate check
+    // This is a simple implementation - replace with your actual logic
+    return user?.email?.endsWith('@seomax.com') || false;
   };
 
-  const value = {
+  return {
     user,
     loading,
-    signIn,
+    error,
     signOut,
+    isAdmin,
   };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  
-  return context;
 } 

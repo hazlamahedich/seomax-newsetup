@@ -4,6 +4,8 @@ import { Inter } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { Providers } from '@/components/providers/providers';
+import { FeedbackDialog } from '@/components/ui/feedback-dialog';
+import { Toaster } from '@/components/ui/toaster';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -33,6 +35,12 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <Providers>{children}</Providers>
+          
+          {/* Feedback dialog */}
+          <FeedbackDialog />
+          
+          {/* Toast notifications */}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
