@@ -192,7 +192,7 @@ export class LocalSEOService {
     otherPages: {url: string, html: string}[]
   ): Promise<NAPConsistencyResult> {
     // Extract NAP from main page
-    const mainPageNAP = this.extractNAPInfo($);
+    const mainPageNAP = await this.extractNAPInfo($);
     
     if (!mainPageNAP) {
       return {
@@ -209,7 +209,7 @@ export class LocalSEOService {
     // Check other pages for NAP information
     for (const page of otherPages) {
       const $page = cheerio.load(page.html);
-      const pageNAP = this.extractNAPInfo($page);
+      const pageNAP = await this.extractNAPInfo($page);
       
       if (pageNAP) {
         detectedInstances.push(pageNAP);
@@ -246,55 +246,137 @@ export class LocalSEOService {
   /**
    * Extract NAP information from a page
    */
-  private static extractNAPInfo($: cheerio.CheerioAPI): NAPInfo | null {
-    // Look for LocalBusiness schema first
-    const localBusinessSchema = this.extractLocalBusinessSchema($);
-    
-    if (localBusinessSchema && 
-        localBusinessSchema.name && 
-        localBusinessSchema.address && 
-        localBusinessSchema.telephone) {
-      return {
-        name: localBusinessSchema.name,
-        address: {
-          streetAddress: localBusinessSchema.address.streetAddress,
-          addressLocality: localBusinessSchema.address.addressLocality,
-          addressRegion: localBusinessSchema.address.addressRegion,
-          postalCode: localBusinessSchema.address.postalCode,
-          addressCountry: localBusinessSchema.address.addressCountry,
-          formatted: this.formatAddress(localBusinessSchema.address)
-        },
-        phone: localBusinessSchema.telephone
-      };
+  private static async extractNAPInfo($: cheerio.CheerioAPI): Promise<NAPInfo | null> {
+    try {
+      // Look for LocalBusiness schema first
+      const localBusinessSchema = this.extractLocalBusinessSchema($);
+      
+      if (localBusinessSchema && 
+          localBusinessSchema.name && 
+          localBusinessSchema.address && 
+          localBusinessSchema.telephone) {
+        return {
+          name: localBusinessSchema.name,
+          address: {
+            streetAddress: localBusinessSchema.address.streetAddress,
+            addressLocality: localBusinessSchema.address.addressLocality,
+            addressRegion: localBusinessSchema.address.addressRegion,
+            postalCode: localBusinessSchema.address.postalCode,
+            addressCountry: localBusinessSchema.address.addressCountry,
+            formatted: this.formatAddress(localBusinessSchema.address)
+          },
+          phone: localBusinessSchema.telephone
+        };
+      }
+
+      // Try LLM-based extraction for advanced understanding
+      try {
+        const llmProvider = (await import('../ai/litellm-provider')).LiteLLMProvider.getInstance();
+        
+        // Extract relevant HTML sections that might contain NAP info (header, footer, contact sections)
+        const relevantHtmlParts = [
+          $('header').html(),
+          $('footer').html(),
+          $('.contact, .contact-us, .contact-info, #contact').html(),
+          $('address').parent().html(),
+          $('[itemtype*="PostalAddress"], [itemtype*="LocalBusiness"]').html()
+        ].filter(Boolean).join('\n');
+        
+        // Get the page title and meta description for context
+        const pageTitle = $('title').text().trim();
+        const metaDescription = $('meta[name="description"]').attr('content') || '';
+        
+        const prompt = `
+          Analyze this business website HTML content to extract business NAP (Name, Address, Phone) information.
+          
+          Page title: ${pageTitle}
+          Meta description: ${metaDescription}
+          
+          HTML content:
+          ${relevantHtmlParts.substring(0, 8000)}
+          
+          Return a JSON object with the following structure:
+          {
+            "name": "Business Name",
+            "address": {
+              "streetAddress": "Street address",
+              "addressLocality": "City",
+              "addressRegion": "State/Province",
+              "postalCode": "Zip/Postal code",
+              "addressCountry": "Country",
+              "formatted": "Full formatted address"
+            },
+            "phone": "Phone number",
+            "confidence": {
+              "name": 0-100,
+              "address": 0-100,
+              "phone": 0-100
+            }
+          }
+          
+          If any information is not found, use null for that field. Include a confidence score (0-100) for each extracted element.
+          If you cannot find NAP information with reasonable confidence, return null.
+        `;
+        
+        const response = await llmProvider.callLLM(prompt, undefined, {});
+        
+        if (response?.choices?.[0]?.message?.content) {
+          const result = JSON.parse(response.choices[0].message.content);
+          
+          // Only use LLM results if confidence is high enough
+          if (result && result.confidence.name > 70 && 
+             (result.confidence.address > 70 || result.confidence.phone > 70)) {
+            
+            return {
+              name: result.name,
+              address: {
+                streetAddress: result.address?.streetAddress || undefined,
+                addressLocality: result.address?.addressLocality || undefined,
+                addressRegion: result.address?.addressRegion || undefined,
+                postalCode: result.address?.postalCode || undefined,
+                addressCountry: result.address?.addressCountry || undefined,
+                formatted: result.address?.formatted || this.formatAddress(result.address || {})
+              },
+              phone: result.phone || ''
+            };
+          }
+        }
+      } catch (llmError) {
+        console.error('LLM extraction failed, falling back to rule-based extraction:', llmError);
+        // Continue with fallback approach if LLM fails
+      }
+      
+      // Fallback to generic DOM search
+      // Note: This is a simplified approach; real implementation would be more robust
+      const name = $('h1').first().text().trim() || 
+                   $('meta[property="og:site_name"]').attr('content') ||
+                   $('title').text().trim();
+      
+      // Look for address in footer, contact sections, etc.
+      const addressElement = $('.address, .contact-address, footer address, [itemtype*="PostalAddress"]').first();
+      const address = addressElement.length ? addressElement.text().trim() : '';
+      
+      // Look for phone in common locations
+      const phoneElement = $('.phone, .contact-phone, a[href^="tel:"], [itemprop="telephone"]').first();
+      const phone = phoneElement.length 
+        ? phoneElement.text().trim() || phoneElement.attr('href')?.replace('tel:', '') 
+        : '';
+      
+      if (name && (address || phone)) {
+        return {
+          name,
+          address: {
+            formatted: address
+          },
+          phone: phone || ''
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error in extractNAPInfo:', error);
+      return null;
     }
-    
-    // Fallback to generic DOM search
-    // Note: This is a simplified approach; real implementation would be more robust
-    const name = $('h1').first().text().trim() || 
-                 $('meta[property="og:site_name"]').attr('content') ||
-                 $('title').text().trim();
-    
-    // Look for address in footer, contact sections, etc.
-    const addressElement = $('.address, .contact-address, footer address, [itemtype*="PostalAddress"]').first();
-    const address = addressElement.length ? addressElement.text().trim() : '';
-    
-    // Look for phone in common locations
-    const phoneElement = $('.phone, .contact-phone, a[href^="tel:"], [itemprop="telephone"]').first();
-    const phone = phoneElement.length 
-      ? phoneElement.text().trim() || phoneElement.attr('href')?.replace('tel:', '') 
-      : '';
-    
-    if (name && (address || phone)) {
-      return {
-        name,
-        address: {
-          formatted: address
-        },
-        phone: phone || ''
-      };
-    }
-    
-    return null;
   }
   
   /**

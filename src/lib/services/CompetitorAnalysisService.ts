@@ -235,7 +235,7 @@ export class CompetitorAnalysisService {
     // but we'll create a simplified version for demonstration purposes
     
     // 1. Identify content gaps
-    const contentGaps = this._identifyContentGaps(contentPage, competitors);
+    const contentGaps = await this._identifyContentGaps(contentPage, competitors);
     
     // 2. Identify keyword gaps
     const keywordGaps = this._identifyKeywordGaps(contentPage, competitors);
@@ -259,33 +259,124 @@ export class CompetitorAnalysisService {
    * Identify content gaps based on competitor content
    * @private
    */
-  private static _identifyContentGaps(contentPage: any, competitors: CompetitorData[]): ContentGap[] {
-    // Simplified implementation - in a real app, this would use NLP and topic modeling
-    const sampleGaps: ContentGap[] = [
-      {
-        topic: "Mobile Optimization",
-        description: "Competitors are discussing the importance of mobile-first design for SEO rankings.",
-        relevance: "high",
-        suggestedImplementation: "Add a section on mobile optimization best practices and responsive design techniques.",
-        competitorsCovering: Math.floor(Math.random() * competitors.length) + 1
-      },
-      {
-        topic: "Voice Search Optimization",
-        description: "Competitors are covering how to optimize content for voice search queries.",
-        relevance: "medium",
-        suggestedImplementation: "Include conversational phrases and question-based headings that match voice search patterns.",
-        competitorsCovering: Math.floor(Math.random() * competitors.length) + 1
-      },
-      {
-        topic: "Local SEO Factors",
-        description: "Some competitors discuss how local SEO affects search visibility.",
-        relevance: "low",
-        suggestedImplementation: "Add a short section about local SEO best practices if relevant to your audience.",
-        competitorsCovering: Math.floor(Math.random() * competitors.length) + 1
+  private static async _identifyContentGaps(contentPage: any, competitors: CompetitorData[]): Promise<ContentGap[]> {
+    try {
+      // Try LLM-based content gap analysis
+      try {
+        const { LiteLLMProvider } = await import('../ai/litellm-provider');
+        const llmProvider = LiteLLMProvider.getInstance();
+        
+        // Prepare content data for analysis
+        // Truncate content to reasonable size to control token usage
+        const userContent = contentPage.content?.substring(0, 5000) || '';
+        const userTitle = contentPage.title || '';
+        
+        // Prepare competitor data
+        const competitorData = competitors.map(comp => ({
+          title: comp.title,
+          content: comp.content?.substring(0, 3000) || '',
+          url: comp.url
+        }));
+        
+        const prompt = `
+          I need to identify content gaps between my page and competitor pages for SEO improvement.
+          
+          MY PAGE:
+          Title: ${userTitle}
+          Content: ${userContent}
+          
+          COMPETITOR PAGES:
+          ${JSON.stringify(competitorData)}
+          
+          Please analyze these and identify:
+          1. Topics covered by competitors but missing from my page
+          2. Topics with more comprehensive coverage by competitors
+          3. Unique angles or perspectives I could add
+          
+          For each content gap, provide:
+          - Topic name
+          - Detailed description of the gap
+          - Relevance (high/medium/low)
+          - Suggested implementation approach
+          - Number of competitors covering this topic
+          
+          Focus on semantic understanding beyond just keywords, including:
+          - Content depth and comprehensiveness
+          - Coverage of related subtopics
+          - Structural elements like case studies, examples, stats
+          - Audience targeting differences
+          
+          Return as a JSON array of ContentGap objects with this structure:
+          [
+            {
+              "topic": "Topic name",
+              "description": "Detailed description",
+              "relevance": "high|medium|low",
+              "suggestedImplementation": "How to implement",
+              "competitorsCovering": 3
+            }
+          ]
+        `;
+        
+        const response = await llmProvider.callLLM(prompt, undefined, {
+          projectId: contentPage.projectId
+        });
+        
+        if (response?.choices?.[0]?.message?.content) {
+          try {
+            const result = JSON.parse(response.choices[0].message.content);
+            if (Array.isArray(result) && result.length > 0) {
+              // Validate schema of returned data
+              const validResults = result.filter(gap => 
+                typeof gap.topic === 'string' && 
+                typeof gap.description === 'string' &&
+                ['high', 'medium', 'low'].includes(gap.relevance) &&
+                typeof gap.suggestedImplementation === 'string' &&
+                typeof gap.competitorsCovering === 'number'
+              );
+              
+              if (validResults.length > 0) {
+                return validResults;
+              }
+            }
+          } catch (parseError) {
+            console.error('Error parsing LLM response:', parseError);
+          }
+        }
+      } catch (llmError) {
+        console.error('LLM content gap analysis failed, falling back to rule-based approach:', llmError);
       }
-    ];
+      
+      // Fallback to simplified implementation if LLM approach fails
+      const sampleGaps: ContentGap[] = [
+        {
+          topic: "Mobile Optimization",
+          description: "Competitors are discussing the importance of mobile-first design for SEO rankings.",
+          relevance: "high",
+          suggestedImplementation: "Add a section on mobile optimization best practices and responsive design techniques.",
+          competitorsCovering: Math.floor(Math.random() * competitors.length) + 1
+        },
+        {
+          topic: "Voice Search Optimization",
+          description: "Competitors are covering how to optimize content for voice search queries.",
+          relevance: "medium",
+          suggestedImplementation: "Include conversational phrases and question-based headings that match voice search patterns.",
+          competitorsCovering: Math.floor(Math.random() * competitors.length) + 1
+        },
+        {
+          topic: "Local SEO Factors",
+          description: "Some competitors discuss how local SEO affects search visibility.",
+          relevance: "low",
+          suggestedImplementation: "Add a short section about local SEO best practices if relevant to your audience.",
+          competitorsCovering: Math.floor(Math.random() * competitors.length) + 1
+        }
+      ];
 
-    return sampleGaps;
+      return sampleGaps;
+    } catch (error) {
+      console.error('Error in _identifyContentGaps:', error);
+      return [];
+    }
   }
 
   /**

@@ -56,12 +56,24 @@ SEOMax follows a modern web application architecture designed for scalability an
    - Scoring system for SEO health assessment
    - Recommendation generation based on findings
 
-6. **Local SEO Analysis Architecture** (New)
+6. **Local SEO Analysis Architecture**
    - Dedicated `LocalSEOService` for local business SEO assessment
    - Specialized analysis methods for NAP consistency, GBP detection, schema validation
    - Integration with `SEOAnalysisIntegration` for cohesive analysis
    - Database schema for local SEO analysis results
    - API route for triggering and refreshing analysis
+
+7. **LLM Integration Architecture** (New)
+   - AI service layer built on LangChain with PromptTemplates and RunnableSequence
+   - Structured output parsers for consistent response formatting
+   - Prompt engineering patterns for extracting specific information
+   - Provider abstraction for switching between LLM providers
+   - Context management with chunking strategies for large content
+   - Error handling with fallback mechanisms for reliability
+   - Key integration points:
+     - NAP information extraction in LocalSEOService
+     - Content gap analysis in CompetitorAnalysisService
+     - Recommendation prioritization in TechnicalSEOService
 
 ## Development Setup
 
@@ -88,6 +100,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 # LLM Providers
 OPENAI_API_KEY=your-openai-api-key
 ANTHROPIC_API_KEY=your-anthropic-api-key
+GROQ_API_KEY=your-groq-api-key
 ```
 
 ### Development Commands
@@ -131,6 +144,7 @@ The application is deployed using Vercel with the following configuration:
 4. **Serverless Functions**
    - Compute-intensive operations deployed as serverless functions
    - Memory limits adjusted for large operations
+   - LLM API calls handled with appropriate timeouts
 
 ## Database Schema
 

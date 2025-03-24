@@ -498,18 +498,27 @@ export class TechnicalSEOService {
       const recommendations: Record<string, string[]> = {};
       
       // Get all issues for the site crawl
-      const { data, error } = await this.supabase
+      const { data: issues, error } = await this.supabase
         .from('technical_issues')
         .select('*')
         .eq('site_crawl_id', siteCrawlId);
         
       if (error) throw error;
-      if (!data || data.length === 0) return recommendations;
+      if (!issues || issues.length === 0) return recommendations;
+      
+      // Get site information for context
+      const { data: crawl, error: crawlError } = await this.supabase
+        .from('site_crawls')
+        .select('domain, start_url, pages_count, crawl_depth, created_at, project_id')
+        .eq('id', siteCrawlId)
+        .single();
+        
+      if (crawlError) throw crawlError;
       
       // Group issues by type
       const issuesByType: Record<string, any[]> = {};
       
-      for (const issue of data) {
+      for (const issue of issues) {
         if (!issuesByType[issue.issue_type]) {
           issuesByType[issue.issue_type] = [];
         }
@@ -517,7 +526,70 @@ export class TechnicalSEOService {
         issuesByType[issue.issue_type].push(issue);
       }
       
-      // Generate recommendations based on issue types
+      // Try LLM-based contextual recommendation generation
+      try {
+        const { LiteLLMProvider } = await import('../ai/litellm-provider');
+        const llmProvider = LiteLLMProvider.getInstance();
+        
+        // Prepare summary of issues by type for context
+        const issuesSummary = Object.entries(issuesByType).map(([type, typeIssues]) => {
+          return {
+            type,
+            count: typeIssues.length,
+            severity: this.getHighestSeverity(typeIssues),
+            sample: typeIssues.slice(0, 3).map(issue => ({
+              url: issue.page_url,
+              description: issue.issue_description
+            }))
+          };
+        });
+        
+        const prompt = `
+          I need to generate contextual technical SEO recommendations for a website.
+          
+          SITE INFO:
+          Domain: ${crawl.domain}
+          Main URL: ${crawl.start_url}
+          Pages crawled: ${crawl.pages_count}
+          Crawl depth: ${crawl.crawl_depth}
+          Analysis date: ${new Date(crawl.created_at).toISOString().split('T')[0]}
+          
+          TECHNICAL ISSUES FOUND BY TYPE:
+          ${JSON.stringify(issuesSummary, null, 2)}
+          
+          For each issue type, provide:
+          1. A prioritized list of 3-5 specific recommendations based on the severity and frequency of issues
+          2. Include implementation difficulty (easy/medium/hard) with each recommendation
+          3. Provide detailed technical implementation steps
+          4. Consider the scale of the site (${crawl.pages_count} pages) when suggesting solutions
+          5. For each recommendation, suggest tools or code examples when appropriate
+          
+          Focus on actionable, specific advice rather than general best practices.
+          Return a JSON object with issue types as keys and arrays of recommendation strings as values.
+          Format each recommendation string as: "[Implementation difficulty] Recommendation: Detailed steps"
+        `;
+        
+        const response = await llmProvider.callLLM(prompt, undefined, {
+          projectId: crawl.project_id
+        });
+        
+        if (response?.choices?.[0]?.message?.content) {
+          try {
+            const llmRecommendations = JSON.parse(response.choices[0].message.content);
+            
+            // Validate and use LLM recommendations if valid
+            if (typeof llmRecommendations === 'object' && Object.keys(llmRecommendations).length > 0) {
+              return llmRecommendations;
+            }
+          } catch (parseError) {
+            console.error('Error parsing LLM recommendations:', parseError);
+          }
+        }
+      } catch (llmError) {
+        console.error('LLM recommendation generation failed, falling back to rule-based approach:', llmError);
+      }
+      
+      // Fallback to rule-based recommendations if LLM fails
       
       // Title tag issues
       if (issuesByType['missing_title'] || issuesByType['duplicate_title']) {
@@ -588,138 +660,55 @@ export class TechnicalSEOService {
       if (issuesByType['http2-not-implemented']) {
         recommendations['http2_issues'] = [
           'Implement HTTP/2 protocol on your server',
-          'Use a CDN that supports HTTP/2',
-          'Take advantage of HTTP/2 multiplexing by reducing script concatenation',
-          'Ensure your SSL/TLS certificates are properly configured',
-          'Monitor HTTP/2 performance with specialized tools',
-          'Consider HTTP/2 server push for critical resources',
-          'Update server software to support HTTP/2'
+          'Enable HTTP/2 support in your hosting environment',
+          'Update your server software to support HTTP/2',
+          'Consider using a CDN that supports HTTP/2',
+          'Optimize your server for HTTP/2 performance',
+          'Bundle your assets differently for HTTP/2'
         ];
       }
       
       // Resource optimization issues
-      if (issuesByType['js-not-minified'] || issuesByType['css-not-minified']) {
-        recommendations['resource_optimization_issues'] = [
+      if (issuesByType['unminified_js'] || issuesByType['unminified_css']) {
+        recommendations['resource_optimization'] = [
           'Minify all JavaScript files to reduce file size',
-          'Minify all CSS files to reduce file size',
-          'Combine multiple JavaScript files into fewer files when possible',
-          'Combine multiple CSS files into fewer files when possible',
-          'Use a build process that includes minification (webpack, gulp, etc.)',
-          'Remove unused JavaScript and CSS code',
-          'Consider using code splitting for large applications',
-          'Implement critical CSS inline and defer non-critical CSS'
+          'Minify CSS files to improve loading speed',
+          'Combine multiple JavaScript files into one',
+          'Combine multiple CSS files into one',
+          'Use tools like Terser for JavaScript and cssnano for CSS minification',
+          'Implement automation for minification in your build process'
         ];
       }
-      
-      // Broken links
-      if (issuesByType['broken_link']) {
-        recommendations['broken_link_issues'] = [
-          'Fix or remove all broken internal links',
-          'Redirect URLs that have been permanently moved (301 redirects)',
-          'Update outbound links to point to valid resources',
-          'Implement a custom 404 page with navigation options',
-          'Regularly monitor and fix broken links',
-          'Check for broken links in your navigation menu and footer'
-        ];
-      }
-      
-      // Redirect issues
-      if (issuesByType['redirect_chain']) {
-        recommendations['redirect_issues'] = [
-          'Minimize redirect chains (ideally 0-1 redirects)',
-          'Update internal links to point directly to final URLs',
-          'Use 301 redirects for permanent moves',
-          'Avoid redirect loops',
-          'Check redirect performance - they should be fast',
-          'Implement server-side redirects rather than client-side when possible'
-        ];
-      }
-      
-      // Canonicalization issues
-      if (issuesByType['canonicalization_issue']) {
-        recommendations['canonicalization_issues'] = [
-          'Implement canonical tags on all pages',
-          'Ensure canonical URLs are correctly formatted and valid',
-          'Use absolute URLs in canonical tags',
-          'Choose one version of your URL (with/without www, with/without trailing slash)',
-          'Make sure redirects and canonical tags are consistent',
-          'Check for conflicting canonicalization signals',
-          'Set up proper handling of URL parameters'
-        ];
-      }
-      
-      // Content quality issues
-      if (issuesByType['low_content'] || issuesByType['thin_content']) {
-        recommendations['content_issues'] = [
-          'Expand thin content pages with meaningful, valuable information',
-          'Ensure content is original and provides value to users',
-          'Add relevant images, videos, or infographics to enhance content',
-          'Update outdated content regularly',
-          'Structure content with appropriate headings and paragraphs',
-          'Aim for minimum 300 words for standard pages',
-          'Use expert knowledge to create authoritative content',
-          'Include relevant keywords naturally in your content'
-        ];
-      }
-      
-      // Schema markup issues
-      if (issuesByType['missing_schema'] || issuesByType['invalid_schema']) {
-        recommendations['schema_issues'] = [
-          'Implement schema markup appropriate for your content type',
-          'Validate schema with Google\'s Structured Data Testing Tool',
-          'Keep schema current with latest standards from Schema.org',
-          'Add organization and breadcrumb schema to all pages',
-          'Use specific schema types for specific content (Product, Article, FAQ, etc.)',
-          'Ensure required properties are included in each schema type',
-          'Test implementation with Google\'s Rich Results Test'
-        ];
-      }
-      
-      // Robots.txt issues
-      if (issuesByType['robots_txt_issue']) {
-        recommendations['robots_txt_issues'] = [
-          'Ensure robots.txt is accessible at domain.com/robots.txt',
-          'Use proper syntax in robots.txt directives',
-          'Don\'t block CSS or JavaScript files needed for rendering',
-          'Block only directories and files that shouldn\'t be indexed',
-          'Add sitemap location to robots.txt',
-          'Test robots.txt in Google Search Console',
-          'Use user-agent specific directives when necessary'
-        ];
-      }
-      
-      // Sitemap issues
-      if (issuesByType['sitemap_issue']) {
-        recommendations['sitemap_issues'] = [
-          'Create and maintain an XML sitemap of all indexable pages',
-          'Keep sitemap under 50MB and 50,000 URLs',
-          'Submit sitemap to Google Search Console',
-          'Update sitemap when new content is published',
-          'Remove non-canonical URLs from sitemap',
-          'Ensure all URLs in sitemap return 200 status code',
-          'Use sitemap index for multiple sitemaps',
-          'Include only URLs you want indexed in sitemap'
-        ];
-      }
-      
-      // General recommendations for all sites
-      recommendations['general_recommendations'] = [
-        'Implement HTTPS across the entire site',
-        'Use descriptive, keyword-rich anchor text for internal links',
-        'Optimize images with descriptive file names and alt text',
-        'Implement breadcrumb navigation for user experience and SEO',
-        'Create a logical site structure with minimal click depth',
-        'Regularly audit and fix technical SEO issues',
-        'Monitor Core Web Vitals and user experience metrics',
-        'Check mobile usability regularly',
-        'Ensure your site has proper internal linking'
-      ];
       
       return recommendations;
     } catch (error) {
       console.error('Error generating recommendations:', error);
       return {};
     }
+  }
+  
+  /**
+   * Get the highest severity from a list of issues
+   */
+  private static getHighestSeverity(issues: any[]): string {
+    const severityOrder: Record<string, number> = {
+      'critical': 4,
+      'high': 3,
+      'medium': 2,
+      'low': 1,
+      'info': 0
+    };
+    
+    let highestSeverity = 'info';
+    
+    for (const issue of issues) {
+      const currentSeverity = issue.issue_severity || 'info';
+      if (severityOrder[currentSeverity as keyof typeof severityOrder] > severityOrder[highestSeverity as keyof typeof severityOrder]) {
+        highestSeverity = currentSeverity;
+      }
+    }
+    
+    return highestSeverity;
   }
   
   /**
@@ -797,7 +786,7 @@ export class TechnicalSEOService {
         'Update your hosting plan if current hosting doesn\'t support HTTP/2',
         'Run HTTP/2 compatibility tests on your server'
       ],
-      'js-not-minified': [
+      'unminified_js': [
         'Use a minification tool like Terser, UglifyJS, or Closure Compiler',
         'Implement a build process with webpack, Rollup, or Parcel',
         'Enable minification in your CMS settings if available',
@@ -807,7 +796,7 @@ export class TechnicalSEOService {
         'Implement tree shaking to eliminate unused code',
         'Set up automated minification in your CI/CD pipeline'
       ],
-      'css-not-minified': [
+      'unminified_css': [
         'Use a minification tool like CSSNano or Clean-CSS',
         'Implement a build process with PostCSS or SASS',
         'Enable CSS minification in your CMS settings if available',
