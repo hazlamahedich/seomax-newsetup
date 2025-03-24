@@ -6,6 +6,7 @@
 - LangChain for AI services
 - Supabase for database and authentication
 - React ecosystem (React Query, Zustand, Framer Motion)
+- PDF generation with jsPDF and HTML2Canvas
 
 ## Critical Implementation Paths
 - AI-powered analysis uses ContentAnalyzer and KeywordAnalyzer services
@@ -13,21 +14,33 @@
 - User auth flows through next-auth with Supabase credentials provider
 - Content analysis runs in stages: readability → keyword usage → structure → suggestions
 - End-to-end tests follow critical user journeys with Playwright
+- PDF generation for SEO audit reports follows a sequence: fetch report data → create PDF instance → add branding → generate content → save as data URI → trigger download
 
 ## User Preferences
 - Clear, actionable suggestions for content optimization
 - Visual representation of SEO metrics with trends over time
 - Simplified UI for complex analysis tasks
 - Quick access to most important metrics from dashboard
+- Professional PDF reports with clear structure and actionable information
 
 ## Project-Specific Patterns
 - Component files follow naming pattern: [Functionality][ComponentType].tsx
 - Services use class-based approach with instance methods
 - AI services separate prompts from implementation logic
 - State management combines React Query for server state and Zustand for UI state
+- PDF generation uses a dedicated service class with static methods
 - Testing uses React Testing Library with Jest for unit/integration tests and Playwright for E2E tests
 - E2E tests are grouped by functionality with separate spec files
 - Test fixtures provide reusable test data and helper functions
+
+## PDF Generation Patterns
+- PDFGenerationService implements static methods for modular PDF creation
+- PDF generation workflow: create document → add metadata → add branding → generate content → manage pagination → output as data URI
+- PDF reports follow consistent structure: header, summary, metrics, category scores, recommendations, technical issues, conclusion
+- Color coding implemented for scores (green/blue/amber/red) and severity levels
+- PDF button component handles generation state (idle, loading, success, error) with visual feedback
+- PDF downloads use proper browser security policies with data URIs and temporary link elements
+- Error handling includes graceful fallbacks and user notifications via toast
 
 ## Known Challenges
 - Hydration errors can occur with browser extensions like Grammarly
@@ -40,6 +53,10 @@
 - Mock services simulate API calls until actual integrations are built
 - E2E tests require development server and test user accounts
   - Solution: Use setup script to create test data and accounts
+- PDF generation can be resource-intensive for large reports
+  - Solution: Implement pagination and optimize content rendering
+- PDF exports in different browsers may render slightly differently
+  - Solution: Use HTML2Canvas for consistent rendering across browsers
 
 ## Evolution of Decisions
 - Moved from route handlers to server components for data fetching
@@ -48,6 +65,8 @@
 - Improved state management with better typing and error boundaries
 - Added middleware for handling auth edge cases
 - Expanded testing strategy from unit tests to comprehensive E2E tests
+- Implemented centralized Zustand stores for feature-specific state management
+- Moved from direct component state to Zustand for SEO audit reports and PDF generation
 
 ## Troubleshooting Tips
 - If encountering hydration errors, check DOM modifications from browser extensions
@@ -56,6 +75,8 @@
 - If tests are failing, check Jest DOM matchers and mock service setup
 - Check for missing environment variables when Supabase connections fail
 - For E2E test failures, ensure test users exist and dev server is running
+- If PDF generation fails, check browser console for jsPDF or HTML2Canvas errors
+- For PDF styling issues, inspect the scale and dimensions set in the PDFGenerationService
 
 ## Code Conventions
 - Use named exports for components and functions
@@ -63,4 +84,6 @@
 - Follow the naming pattern: interface [ComponentName]Props
 - Place shared utilities in the /lib directory
 - Handle loading and error states for all data-dependent components
-- Test files follow the pattern: [filename].test.tsx for unit/integration tests and [feature].spec.ts for E2E tests 
+- Test files follow the pattern: [filename].test.tsx for unit/integration tests and [feature].spec.ts for E2E tests
+- Service classes use static methods for utility functions
+- PDF generation follows a modular approach with separate methods for different sections 

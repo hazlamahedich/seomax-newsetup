@@ -1,11 +1,14 @@
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react';
 import { signIn as supabaseSignIn, signOut as supabaseSignOut, signUp as supabaseSignUp } from '../lib/auth/auth-service';
+import { useExtendedAuth } from '@/components/providers/auth-provider';
 
 export function useAuth() {
   const { data: session, status } = useSession();
+  const { supabaseUser, isAdmin: checkIsAdmin } = useExtendedAuth();
   const loading = status === 'loading';
   
-  const user = session?.user ?? null;
+  // Prefer NextAuth user but fallback to Supabase user
+  const user = session?.user ?? supabaseUser ?? null;
   
   /**
    * Sign in with email and password
@@ -58,7 +61,7 @@ export function useAuth() {
         return { error: new Error(result.error || 'Sign up failed') };
       }
       
-      return { error: null };
+      return { error: null, emailConfirmationRequired: true };
     } catch (error) {
       return { error: error as Error };
     }
@@ -68,11 +71,22 @@ export function useAuth() {
    * Sign out the user
    */
   const signOut = async () => {
-    // Sign out from Supabase
-    await supabaseSignOut();
-    
-    // Sign out from NextAuth
-    await nextAuthSignOut();
+    try {
+      // Sign out from Supabase
+      await supabaseSignOut();
+      
+      // Sign out from NextAuth (with redirect)
+      return await nextAuthSignOut({ callbackUrl: '/' });
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+  };
+  
+  /**
+   * Check if the current user is an admin
+   */
+  const isAdmin = () => {
+    return checkIsAdmin();
   };
   
   return {
@@ -81,5 +95,6 @@ export function useAuth() {
     signIn,
     signUp,
     signOut,
+    isAdmin,
   };
 } 

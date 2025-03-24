@@ -1,9 +1,9 @@
-import NextAuth from "next-auth";
+import { NextAuthOptions } from "next-auth";
+import { User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import type { NextAuthOptions } from "next-auth";
-import type { User } from "next-auth";
 import { z } from "zod";
 import { signIn } from "@/lib/auth/auth-service";
+import NextAuth from "next-auth";
 
 // Extend the built-in session types
 declare module "next-auth" {
@@ -71,8 +71,10 @@ export const authOptions: NextAuthOptions = {
       return token;
     }
   },
+  // Explicitly provide required values to prevent NextAuth from using dynamic APIs
+  secret: process.env.NEXTAUTH_SECRET,
 };
 
-// Export the NextAuth handler
+// Use standard export instead of dynamic exports
 const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST }; 
+export { handler as GET, handler as POST } 

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks';
 import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,8 +18,10 @@ import {
   Plus, 
   Search, 
   Settings, 
-  Zap
+  Zap,
+  Loader2
 } from 'lucide-react';
+import { toast } from '@/components/ui/use-toast';
 
 // Create a Supabase client
 const supabase = createClient(
@@ -41,6 +43,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageLoaded, setPageLoaded] = useState(false);
+  const [interactive, setInteractive] = useState(false);
 
   // SEO metrics (sample data)
   const [seoScore, setSeoScore] = useState(78);
@@ -58,10 +61,15 @@ export default function DashboardPage() {
   
   // Redirect if not authenticated
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    } else if (user) {
-      fetchProjects();
+    // Only run if authentication is ready (not in loading state)
+    if (!authLoading) {
+      // If user is authenticated, fetch their projects
+      if (user) {
+        fetchProjects();
+      } else {
+        // If not authenticated and done loading, redirect to login
+        router.push('/login');
+      }
     }
   }, [user, authLoading, router]);
   
@@ -77,11 +85,42 @@ export default function DashboardPage() {
     }
   }, [loading]);
   
+  // Add debounce for user interactions
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => {
+        setInteractive(true);
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
+  
   const fetchProjects = async () => {
     if (!user) return;
     
     try {
       setLoading(true);
+      
+      // First check if the projects table exists by querying a single row
+      const { data: checkData, error: checkError } = await supabase
+        .from('projects')
+        .select('id')
+        .limit(1);
+      
+      if (checkError) {
+        // If there's an error with the table, show a more helpful message
+        console.error('Error accessing projects table:', checkError);
+        toast({
+          title: 'Database error',
+          description: 'Unable to access projects data. The projects table may not be properly set up.',
+          variant: 'destructive',
+        });
+        setProjects([]);
+        return;
+      }
+      
+      // If the table check passed, fetch the user's projects
       const { data, error } = await supabase
         .from('projects')
         .select('*')
@@ -89,11 +128,23 @@ export default function DashboardPage() {
         
       if (error) {
         console.error('Error fetching projects:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load your projects. Please try again later.',
+          variant: 'destructive',
+        });
       } else {
         setProjects(data || []);
       }
     } catch (err) {
       console.error('Error fetching projects:', err);
+      toast({
+        title: 'Unexpected error',
+        description: 'An unexpected error occurred while loading your projects.',
+        variant: 'destructive',
+      });
+      // Always set projects to empty array on error to prevent UI issues
+      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -136,424 +187,169 @@ export default function DashboardPage() {
     })
   };
 
-  if (authLoading) {
+  // Show loading spinner while auth is checking or data is loading
+  if (authLoading || (loading && !interactive)) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="flex flex-col items-center"
-        >
-          <motion.div
-            animate={{ 
-              rotate: 360,
-              transition: { 
-                duration: 1.5,
-                repeat: Infinity,
-                ease: "linear"
-              }
-            }}
-            className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full mb-3"
-          />
-          <p className="text-muted-foreground">Loading your dashboard...</p>
-        </motion.div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <AnimatePresence>
-      <div className="flex min-h-screen flex-col">
-        <motion.header 
-          className="border-b sticky top-0 z-10 backdrop-blur-md bg-background/80"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="container flex h-16 items-center justify-between">
-            <Link href="/dashboard" className="font-bold text-2xl">
-              SEOMax
-            </Link>
-            <div className="flex items-center space-x-4">
-              {user && (
-                <div className="text-sm text-muted-foreground">
-                  {user.email}
-                </div>
-              )}
-              <Button variant="ghost" onClick={handleSignOut}>
-                Sign out
-              </Button>
-            </div>
+    <div className="container py-6">
+      {/* Debug Navigation Panel - REMOVED */}
+      
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div className="flex flex-col space-y-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+            <Button asChild>
+              <Link href="/dashboard/projects/new">
+                <Plus className="mr-2 h-4 w-4" /> New Project
+              </Link>
+            </Button>
           </div>
-        </motion.header>
-
-        <div className="flex flex-1">
-          <motion.div 
-            className="hidden md:block w-64 border-r p-4 space-y-6"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <div className="space-y-1">
-              <Button variant="ghost" className="w-full justify-start" asChild>
-                <Link href="/dashboard">
-                  <LayoutDashboard className="mr-2 h-4 w-4" />
-                  Dashboard
-                </Link>
-              </Button>
-              <Button variant="ghost" className="w-full justify-start text-muted-foreground" disabled>
-                <Search className="mr-2 h-4 w-4" />
-                Keyword Research
-              </Button>
-              <Button variant="ghost" className="w-full justify-start text-muted-foreground" disabled>
-                <FileText className="mr-2 h-4 w-4" />
-                Content Analysis
-              </Button>
-              <Button variant="ghost" className="w-full justify-start text-muted-foreground" disabled>
-                <Link2 className="mr-2 h-4 w-4" />
-                Backlinks
-              </Button>
-              <Button variant="ghost" className="w-full justify-start text-muted-foreground" disabled>
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </Button>
-            </div>
-            
-            <div className="pt-4 border-t">
-              <h3 className="text-sm font-medium mb-2">Your Websites</h3>
-              <div className="space-y-1">
-                {projects.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-2">No websites yet</p>
-                ) : (
-                  projects.map((project) => (
-                    <Button 
-                      key={project.id} 
-                      variant="ghost" 
-                      className="w-full justify-start text-xs" 
-                      asChild
-                    >
-                      <Link href={`/dashboard/projects/${project.id}`}>
-                        <Globe className="mr-2 h-3 w-3" />
-                        <span className="truncate">{project.website_name}</span>
-                      </Link>
-                    </Button>
-                  ))
-                )}
-                <Button variant="ghost" className="w-full justify-start text-xs mt-2" asChild>
-                  <Link href="/dashboard/new-project">
-                    <Plus className="mr-2 h-3 w-3" />
-                    Add Website
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </motion.div>
-
-          <main className="flex-1 container py-10">
-            <motion.div 
-              className="flex justify-between items-center mb-8"
-              initial="hidden"
-              animate="visible"
-              variants={fadeIn}
-            >
-              <h1 className="text-3xl font-bold">Dashboard</h1>
-              <div className="flex gap-3">
-                <Button asChild>
-                  <Link href="/dashboard/new-project">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Website
-                  </Link>
-                </Button>
-              </div>
-            </motion.div>
-            
-            {projects.length === 0 ? (
-              <motion.div 
-                className="text-center py-12 border rounded-lg bg-background"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
-              >
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-4">
-                  <Globe className="h-6 w-6" />
-                </div>
-                <h2 className="text-2xl font-medium mb-2">No websites added yet</h2>
-                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                  Add your first website to start tracking SEO metrics and get AI-powered recommendations
+          
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">SEO Score</CardTitle>
+                <Zap className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{seoScore}/100</div>
+                <p className="text-xs text-muted-foreground">
+                  +2% from last month
                 </p>
-                <Button asChild>
-                  <Link href="/dashboard/new-project">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Website
-                  </Link>
-                </Button>
-              </motion.div>
-            ) : (
-              <>
-                <motion.div 
-                  className="grid gap-6 md:grid-cols-3 mb-10"
-                  variants={staggerContainer}
-                  initial="hidden"
-                  animate="visible"
-                >
-                  <motion.div 
-                    className="border rounded-lg p-6 bg-background hover:shadow-md transition-shadow"
-                    variants={fadeIn}
-                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
-                  >
-                    <div className="text-sm text-muted-foreground mb-2">Average SEO Score</div>
-                    <div className="text-3xl font-bold mb-1">{seoScore}/100</div>
-                    <div className="flex items-center space-x-1 mb-3">
-                      {seoScore > 60 ? (
-                        <span className="text-green-500 text-sm">Good</span>
-                      ) : seoScore > 40 ? (
-                        <span className="text-amber-500 text-sm">Needs Improvement</span>
-                      ) : (
-                        <span className="text-red-500 text-sm">Poor</span>
-                      )}
-                      <span className="text-xs text-muted-foreground">(across all websites)</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${
-                          seoScore > 70 ? 'bg-green-500' : 
-                          seoScore > 50 ? 'bg-blue-500' : 
-                          seoScore > 30 ? 'bg-amber-500' : 
-                          'bg-red-500'
-                        }`}
-                        style={{ width: `${seoScore}%` }}
-                      />
-                    </div>
-                  </motion.div>
-                  
-                  <motion.div 
-                    className="border rounded-lg p-6 bg-background hover:shadow-md transition-shadow"
-                    variants={fadeIn}
-                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
-                  >
-                    <div className="text-sm text-muted-foreground mb-2">Organic Traffic</div>
-                    <div className="text-3xl font-bold mb-1">{trafficData.organic}</div>
-                    <div className="flex items-center space-x-2 mb-3">
-                      <span className="text-green-500 text-sm">+12%</span>
-                      <span className="text-xs text-muted-foreground">from last month</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                      <span className="w-3 h-3 bg-green-500 rounded-full"></span>
-                      <span>Organic</span>
-                      <span className="w-3 h-3 bg-blue-500 rounded-full ml-2"></span>
-                      <span>Direct: {trafficData.direct}</span>
-                      <span className="w-3 h-3 bg-purple-500 rounded-full ml-2"></span>
-                      <span>Referral: {trafficData.referral}</span>
-                    </div>
-                  </motion.div>
-                  
-                  <motion.div 
-                    className="border rounded-lg p-6 bg-background hover:shadow-md transition-shadow"
-                    variants={fadeIn}
-                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
-                  >
-                    <div className="text-sm text-muted-foreground mb-2">Total Websites</div>
-                    <div className="text-3xl font-bold mb-1">{projects.length}</div>
-                    <div className="flex items-center mb-3">
-                      <span className="text-xs text-muted-foreground">
-                        {projects.reduce((total, project) => total + (project.keywords?.length || 0), 0)} keywords tracked
-                      </span>
-                    </div>
-                    <Button variant="outline" className="w-full text-sm" size="sm" asChild>
-                      <Link href="/dashboard/new-project">
-                        <Plus className="mr-1 h-3 w-3" />
-                        Add Another Website
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Organic Traffic</CardTitle>
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{trafficData.organic}</div>
+                <p className="text-xs text-muted-foreground">
+                  +12% from last month
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Keywords Tracked</CardTitle>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{keywordRankings.length}</div>
+                <p className="text-xs text-muted-foreground">
+                  Averaging position 10.3
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active Projects</CardTitle>
+                <Globe className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{projects.length}</div>
+                <p className="text-xs text-muted-foreground">
+                  Across {projects.length} websites
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+          
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+            <Card className="col-span-4">
+              <CardHeader>
+                <CardTitle>Your Projects</CardTitle>
+                <CardDescription>
+                  Websites and content currently being tracked
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                  </div>
+                ) : projects.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <Globe className="mb-4 h-12 w-12 text-muted-foreground" />
+                    <h3 className="mb-2 text-lg font-medium">No projects yet</h3>
+                    <p className="mb-4 max-w-md text-sm text-muted-foreground">
+                      Add your first website to start tracking keywords and optimizing your content.
+                    </p>
+                    <Button asChild>
+                      <Link href="/dashboard/projects/new">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Your First Project
                       </Link>
                     </Button>
-                  </motion.div>
-                </motion.div>
-
-                <motion.div variants={fadeIn} initial="hidden" animate="visible">
-                  <Tabs defaultValue="websites" className="mb-8">
-                    <TabsList>
-                      <TabsTrigger value="websites">Your Websites</TabsTrigger>
-                      <TabsTrigger value="keywords">Top Keywords</TabsTrigger>
-                      <TabsTrigger value="actions">Recommended Actions</TabsTrigger>
-                    </TabsList>
-                    
-                    <TabsContent value="websites" className="mt-6">
-                      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {projects.map((project, index) => (
-                          <motion.div
-                            key={project.id}
-                            variants={listItemVariants}
-                            custom={index}
-                            initial="hidden"
-                            animate="visible"
-                          >
-                            <Card className="overflow-hidden hover:shadow-md transition-shadow">
-                              <CardHeader className="p-6 pb-4">
-                                <CardTitle className="flex justify-between items-center">
-                                  <span className="truncate">{project.website_name}</span>
-                                  <span className="text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
-                                    {getRandomScore()}/100
-                                  </span>
-                                </CardTitle>
-                                <CardDescription className="truncate">
-                                  {project.website_url}
-                                </CardDescription>
-                              </CardHeader>
-                              <CardContent className="p-6 pt-0">
-                                <div className="flex items-center text-sm text-muted-foreground mb-4">
-                                  <div className="flex items-center">
-                                    <span className="w-2.5 h-2.5 bg-primary rounded-full mr-1.5"></span>
-                                    <span>{project.keywords?.length || 0} keywords</span>
-                                  </div>
-                                  <div className="flex items-center ml-4">
-                                    <span className="w-2.5 h-2.5 bg-green-500 rounded-full mr-1.5"></span>
-                                    <span>{getRandomNumber(3, 12)} in top 10</span>
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <Button variant="outline" size="sm" asChild>
-                                    <Link href={`/dashboard/projects/${project.id}`}>
-                                      <BarChart3 className="mr-2 h-3.5 w-3.5" />
-                                      Dashboard
-                                    </Link>
-                                  </Button>
-                                  <Button size="sm" asChild>
-                                    <Link href={`/dashboard/projects/${project.id}/keywords`}>
-                                      <Search className="mr-2 h-3.5 w-3.5" />
-                                      Keywords
-                                    </Link>
-                                  </Button>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </motion.div>
-                        ))}
-                        
-                        <motion.div
-                          variants={listItemVariants}
-                          custom={projects.length}
-                          initial="hidden"
-                          animate="visible"
-                        >
-                          <Card className="border-dashed h-full flex items-center justify-center">
-                            <Button variant="ghost" asChild>
-                              <Link href="/dashboard/new-project" className="flex flex-col items-center py-12">
-                                <Plus className="h-8 w-8 mb-3 text-muted-foreground" />
-                                <span>Add Website</span>
-                              </Link>
-                            </Button>
-                          </Card>
-                        </motion.div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {projects.map(project => (
+                      <div 
+                        key={project.id}
+                        className="flex items-center justify-between rounded-lg border p-4"
+                      >
+                        <div className="space-y-1">
+                          <h3 className="font-medium">{project.website_name}</h3>
+                          <p className="text-sm text-muted-foreground">{project.website_url}</p>
+                        </div>
+                        <Button variant="outline" asChild>
+                          <Link href={`/dashboard/projects/${project.id}`}>
+                            View Dashboard
+                          </Link>
+                        </Button>
                       </div>
-                    </TabsContent>
-                    
-                    <TabsContent value="keywords" className="mt-6">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Top Keywords Performance</CardTitle>
-                          <CardDescription>
-                            Current rankings for your most important keywords
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="overflow-x-auto">
-                            <table className="w-full">
-                              <thead>
-                                <tr className="border-b">
-                                  <th className="text-left font-medium py-2">Keyword</th>
-                                  <th className="text-center font-medium py-2">Position</th>
-                                  <th className="text-center font-medium py-2">Change</th>
-                                  <th className="text-right font-medium py-2">Search Volume</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {keywordRankings.map((kw, idx) => (
-                                  <tr key={idx} className="border-b last:border-0 hover:bg-muted/50">
-                                    <td className="py-3">{kw.keyword}</td>
-                                    <td className="py-3 text-center">
-                                      <span className="inline-block px-2 py-1 rounded-full text-xs bg-primary/10 text-primary">
-                                        {kw.position}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 text-center">
-                                      {kw.change > 0 ? (
-                                        <span className="text-green-500">↑{kw.change}</span>
-                                      ) : kw.change < 0 ? (
-                                        <span className="text-red-500">↓{Math.abs(kw.change)}</span>
-                                      ) : (
-                                        <span className="text-gray-500">-</span>
-                                      )}
-                                    </td>
-                                    <td className="py-3 text-right">{getRandomNumber(500, 5000)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </TabsContent>
-                    
-                    <TabsContent value="actions" className="mt-6">
-                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-base">Keyword Research</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <p className="text-sm text-muted-foreground mb-4">
-                              Discover new keyword opportunities with our AI research tool
-                            </p>
-                            {projects.length > 0 && (
-                              <Button asChild>
-                                <Link href={`/dashboard/projects/${projects[0].id}/keywords`}>
-                                  <Search className="mr-2 h-4 w-4" />
-                                  Research Keywords
-                                </Link>
-                              </Button>
-                            )}
-                          </CardContent>
-                        </Card>
-                        
-                        <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-base">Content Optimization</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <p className="text-sm text-muted-foreground mb-4">
-                              Analyze and improve your content for better rankings
-                            </p>
-                            <Button variant="outline" disabled>
-                              <FileText className="mr-2 h-4 w-4" />
-                              Coming Soon
-                            </Button>
-                          </CardContent>
-                        </Card>
-                        
-                        <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-base">Technical SEO</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <p className="text-sm text-muted-foreground mb-4">
-                              Fix technical issues that are affecting your rankings
-                            </p>
-                            <Button variant="outline" disabled>
-                              <Zap className="mr-2 h-4 w-4" />
-                              Coming Soon
-                            </Button>
-                          </CardContent>
-                        </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card className="col-span-3">
+              <CardHeader>
+                <CardTitle>Keyword Rankings</CardTitle>
+                <CardDescription>
+                  Top keywords and their positions
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {keywordRankings.map((keyword, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium leading-none">
+                          {keyword.keyword}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Position {keyword.position}
+                        </p>
                       </div>
-                    </TabsContent>
-                  </Tabs>
-                </motion.div>
-              </>
-            )}
-          </main>
+                      <div className={`flex items-center ${keyword.change > 0 ? 'text-green-500' : keyword.change < 0 ? 'text-red-500' : 'text-gray-500'}`}>
+                        {keyword.change > 0 ? '↑' : keyword.change < 0 ? '↓' : '−'}
+                        <span className="ml-1">{Math.abs(keyword.change)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
-    </AnimatePresence>
+      </motion.div>
+    </div>
   );
 }
 

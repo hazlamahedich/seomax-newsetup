@@ -15,6 +15,7 @@ export interface Feedback {
   rating?: number;
   location?: string;
   status: FeedbackStatus;
+  adminResponse?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -44,6 +45,7 @@ const mapToFeedback = (data: FeedbackTable): Feedback => ({
   rating: data.rating || undefined,
   location: data.location || undefined,
   status: data.status as FeedbackStatus,
+  adminResponse: data.admin_response,
   createdAt: data.created_at,
   updatedAt: data.updated_at,
 });
@@ -58,14 +60,17 @@ export interface FeedbackInput {
   status?: FeedbackStatus;
 }
 
-// Get the appropriate client - try pooled first, fall back to regular
+// Create a simple in-memory cache for stats
+let cachedStats: {
+  data: any;
+  timestamp: number;
+} | null = null;
+const CACHE_TTL = 300000; // 5 minute cache TTL (increased from 1 minute)
+
+// Get the appropriate client - prefer the singleton instance to avoid multiple client warnings
 const getClient = () => {
-  try {
-    return createPooledSupabaseClient();
-  } catch (error) {
-    console.warn('Using default Supabase client, pooled client not available:', error);
-    return supabase;
-  }
+  // Simply use the singleton instance to avoid the "Multiple GoTrueClient instances" warning
+  return supabase;
 };
 
 export const FeedbackService = {
@@ -192,28 +197,44 @@ export const FeedbackService = {
         .from('user_feedback')
         .select('*', { count: 'exact' });
         
-      // Apply filters if provided
+      // Apply filters
       if (status) {
         query = query.eq('status', status);
       }
-      
       if (type) {
         query = query.eq('feedback_type', type);
       }
       
-      // Add pagination and sorting
-      const { data, error, count } = await query
+      // Apply pagination
+      query = query
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
-
+      
+      const { data, error, count } = await query;
+      
       if (error) {
-        console.error('Error fetching all feedback:', error);
+        console.error('Error fetching feedback:', error);
         throw error;
       }
-
-      return { 
-        data: data as unknown as Feedback[], 
-        count: count || 0 
+      
+      // Convert database records to application model
+      const feedbacks = (data as any[]).map(item => ({
+        id: item.id,
+        userId: item.user_id,
+        feedbackType: item.feedback_type as FeedbackType,
+        subject: item.subject,
+        content: item.content,
+        rating: item.rating,
+        location: item.location,
+        status: item.status as FeedbackStatus,
+        adminResponse: item.admin_response,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at
+      }));
+      
+      return {
+        data: feedbacks,
+        count: count || 0
       };
     },
     
@@ -224,65 +245,110 @@ export const FeedbackService = {
       byStatus: Record<FeedbackStatus, number>;
       averageRating: number | null;
     }> {
-      const client = getClient();
+      // Check if we have a valid cached result
+      if (cachedStats && (Date.now() - cachedStats.timestamp < CACHE_TTL)) {
+        console.log('Returning cached feedback stats');
+        return cachedStats.data;
+      }
       
-      // Get all feedback for statistics
-      const { data, error } = await client
-        .from('user_feedback')
-        .select('*');
+      try {
+        const client = getClient();
+        
+        // Get all feedback for statistics
+        const { data, error } = await client
+          .from('user_feedback')
+          .select('*');
 
-      if (error) {
+        if (error) {
+          console.error('Error fetching feedback stats:', error);
+          // Return default stats when table doesn't exist or other errors
+          const defaultStats = {
+            totalCount: 0,
+            byType: {
+              general: 0,
+              feature_request: 0,
+              bug_report: 0,
+              usability: 0,
+              satisfaction: 0
+            },
+            byStatus: {
+              new: 0,
+              in_review: 0,
+              planned: 0,
+              implemented: 0,
+              declined: 0
+            },
+            averageRating: null
+          };
+          
+          // Cache the default results to prevent further API calls
+          cachedStats = {
+            data: defaultStats,
+            timestamp: Date.now()
+          };
+          
+          return defaultStats;
+        }
+
+        // Convert database records to application model
+        const feedbacks = (data as any[]).map(item => ({
+          feedbackType: item.feedback_type as FeedbackType,
+          status: item.status as FeedbackStatus,
+          rating: item.rating
+        }));
+        
+        const byType: Record<FeedbackType, number> = {
+          general: 0,
+          feature_request: 0,
+          bug_report: 0,
+          usability: 0,
+          satisfaction: 0
+        };
+        
+        const byStatus: Record<FeedbackStatus, number> = {
+          new: 0,
+          in_review: 0,
+          planned: 0,
+          implemented: 0,
+          declined: 0
+        };
+        
+        let ratingSum = 0;
+        let ratingCount = 0;
+        
+        // Calculate statistics
+        feedbacks.forEach(feedback => {
+          // Count by type
+          byType[feedback.feedbackType] += 1;
+          
+          // Count by status
+          byStatus[feedback.status] += 1;
+          
+          // Sum ratings
+          if (feedback.rating) {
+            ratingSum += feedback.rating;
+            ratingCount++;
+          }
+        });
+        
+        const stats = {
+          totalCount: feedbacks.length,
+          byType,
+          byStatus,
+          averageRating: ratingCount > 0 ? ratingSum / ratingCount : null
+        };
+        
+        // Cache the result to prevent further API calls
+        cachedStats = {
+          data: stats,
+          timestamp: Date.now()
+        };
+        
+        return stats;
+      } catch (error) {
         console.error('Error fetching feedback stats:', error);
         throw error;
       }
-
-      // Convert database records to application model
-      const feedbacks = (data as any[]).map(item => ({
-        feedbackType: item.feedback_type as FeedbackType,
-        status: item.status as FeedbackStatus,
-        rating: item.rating
-      }));
-      
-      const byType: Record<FeedbackType, number> = {
-        general: 0,
-        feature_request: 0,
-        bug_report: 0,
-        usability: 0,
-        satisfaction: 0
-      };
-      
-      const byStatus: Record<FeedbackStatus, number> = {
-        new: 0,
-        in_review: 0,
-        planned: 0,
-        implemented: 0,
-        declined: 0
-      };
-      
-      let ratingSum = 0;
-      let ratingCount = 0;
-      
-      // Calculate statistics
-      feedbacks.forEach(feedback => {
-        // Count by type
-        byType[feedback.feedbackType] += 1;
-        
-        // Count by status
-        byStatus[feedback.status] += 1;
-        
-        // Sum ratings
-        if (feedback.rating) {
-          ratingSum += feedback.rating;
-          ratingCount++;
-        }
-      });
-      
-      return {
-        totalCount: feedbacks.length,
-        byType,
-        byStatus,
-        averageRating: ratingCount > 0 ? ratingSum / ratingCount : null
-      };
     },
     
     // Bulk update feedback status

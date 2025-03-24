@@ -6,8 +6,8 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, MessageSquare, AlertTriangle, LightbulbIcon, ThumbsUp, Sparkles } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+import { Loader2, MessageSquare, AlertTriangle, LightbulbIcon, ThumbsUp, Sparkles, BrainCircuit } from 'lucide-react';
+import { useSupabaseAuth } from '@/hooks';
 import { FeedbackService, FeedbackType, FeedbackStatus } from '@/lib/services/feedback-service';
 
 interface FeedbackStats {
@@ -19,48 +19,131 @@ interface FeedbackStats {
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const { user, loading: authLoading, isAdmin } = useAuth();
   const [stats, setStats] = useState<FeedbackStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(false);
+  const { user, loading: authLoading, isAdmin } = useSupabaseAuth();
   const { toast } = useToast();
+  const [requestAttempts, setRequestAttempts] = useState<number>(0);
+  const maxRequestAttempts = 3; // Maximum number of fetch attempts to prevent loops
 
+  // This useEffect handles authentication
   useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        router.push('/login');
-        return;
+    // Add a flag to prevent multiple redirects
+    let isMounted = true;
+    
+    const initialize = async () => {
+      // Only do this check if we're done loading auth and we have accurate user info
+      if (!authLoading) {
+        // Handle unauthenticated users
+        if (!user && isMounted) {
+          router.push('/login');
+          return;
+        }
+        
+        // Handle non-admin users
+        if (!isAdmin() && isMounted) {
+          router.push('/dashboard');
+          toast({
+            title: "Access Denied",
+            description: "You don't have permission to access the admin dashboard.",
+            variant: "destructive",
+          });
+          return;
+        }
       }
-      
-      if (!isAdmin()) {
-        router.push('/dashboard');
-        toast({
-          title: "Access Denied",
-          description: "You don't have permission to access the admin dashboard.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      fetchStats();
-    }
+    };
+    
+    initialize();
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
   }, [user, authLoading, router, isAdmin, toast]);
-
-  const fetchStats = async () => {
-    try {
-      setLoading(true);
-      const feedbackStats = await FeedbackService.admin.getFeedbackStats();
-      setStats(feedbackStats);
-    } catch (error) {
-      console.error('Error fetching feedback stats:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load feedback statistics. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
+  
+  // Data fetching useEffect - MUST be defined before any conditional returns
+  useEffect(() => {
+    // Skip if not authenticated or not admin
+    if (authLoading || !user || !isAdmin()) {
+      return;
     }
-  };
+    
+    let isMounted = true;
+    let hasShownError = false; // Flag to prevent multiple error toasts
+    
+    const loadData = async () => {
+      // Only proceed if component is still mounted
+      if (!isMounted) return;
+      
+      try {
+        setLoading(true);
+        const feedbackStats = await FeedbackService.admin.getFeedbackStats();
+        
+        if (isMounted) {
+          setStats(feedbackStats);
+        }
+      } catch (error) {
+        console.error('Error fetching feedback stats:', error);
+        
+        if (isMounted && !hasShownError) {
+          hasShownError = true;
+          toast({
+            title: 'Error',
+            description: 'Failed to load feedback statistics. This might be due to missing database tables.',
+            variant: 'destructive',
+          });
+          
+          // Set default stats to prevent errors when rendering
+          setStats({
+            totalCount: 0,
+            byType: {
+              general: 0,
+              feature_request: 0,
+              bug_report: 0,
+              usability: 0,
+              satisfaction: 0
+            },
+            byStatus: {
+              new: 0,
+              in_review: 0,
+              planned: 0,
+              implemented: 0,
+              declined: 0
+            },
+            averageRating: null
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadData();
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only run once when component mounts
+  }, []);
+  
+  // If still loading auth or checking admin status, show loading spinner
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
+  // If user is not admin, don't render anything (redirect happens in useEffect)
+  if (!user || !isAdmin()) {
+    return null;
+  }
 
   const getFeedbackTypeIcon = (type: FeedbackType) => {
     switch (type) {
@@ -88,7 +171,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (loading || authLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -104,13 +187,21 @@ export default function AdminDashboard() {
             <h1 className="text-3xl font-bold">Admin Dashboard</h1>
             <p className="text-muted-foreground">Feedback management and statistics</p>
           </div>
-          <Link href="/dashboard/admin/feedback">
-            <Button>View All Feedback</Button>
-          </Link>
+          <div className="flex space-x-4">
+            <Link href="/dashboard/admin/llm">
+              <Button variant="default">
+                <BrainCircuit className="mr-2 h-4 w-4" />
+                LLM Management
+              </Button>
+            </Link>
+            <Link href="/dashboard/admin/feedback">
+              <Button variant="outline">View All Feedback</Button>
+            </Link>
+          </div>
         </div>
 
         {stats && (
-          <>
+          <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <Card>
                 <CardHeader className="pb-2">
@@ -273,7 +364,7 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>

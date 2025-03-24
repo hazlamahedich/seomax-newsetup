@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/providers/theme-provider';
-import { Providers } from '@/components/providers/providers';
+import { Providers } from '@/app/providers';
 import { FeedbackDialog } from '@/components/ui/feedback-dialog';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -28,20 +28,22 @@ export default function RootLayout({
         )}
         suppressHydrationWarning
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <Providers>{children}</Providers>
-          
-          {/* Feedback dialog */}
-          <FeedbackDialog />
-          
-          {/* Toast notifications */}
-          <Toaster />
-        </ThemeProvider>
+        <Providers>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+            
+            {/* Feedback dialog */}
+            <FeedbackDialog />
+            
+            {/* Toast notifications */}
+            <Toaster />
+          </ThemeProvider>
+        </Providers>
       </body>
     </html>
   );

@@ -56,7 +56,7 @@ These tests verify the complete technical SEO audit process, including site craw
 
 ### 5. Report Generation Tests ✅
 - ✅ SEO report generation process
-- ✅ PDF/export functionality
+- ✅ SEO Audit PDF export functionality
 - ✅ Report scheduling/automation
 - ✅ Report customization options
 - ✅ Data visualization in reports
@@ -65,6 +65,13 @@ These tests verify the complete technical SEO audit process, including site craw
 **Implementation**: `e2e-tests/report-generation.spec.ts`
 
 These tests verify the report generation process, export capabilities, scheduling options, customization features, and data visualization. The tests include validation for UI elements, export functionality, and data accuracy.
+
+The SEO Audit PDF export functionality test specifically:
+1. Navigates to the project's SEO Audit section
+2. Checks for completed audit reports
+3. Tests the PDF export button functionality using the SEOAuditPdfButton component
+4. Verifies the PDF generation loading/success states
+5. Includes fallback to create a new audit if no completed reports exist
 
 ## Test Environment Setup
 

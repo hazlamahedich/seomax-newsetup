@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { useSession } from 'next-auth/react';
 
 // Create a Supabase client
 const supabase = createClient(
@@ -9,35 +10,38 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-type AuthContextType = {
-  user: any | null;
+type ExtendedAuthContextType = {
+  supabaseUser: any | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<any>;
-  signOut: () => Promise<any>;
+  supabaseSignIn: (email: string, password: string) => Promise<any>;
+  supabaseSignOut: () => Promise<any>;
+  isAdmin: () => boolean;
 };
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
+const ExtendedAuthContext = createContext<ExtendedAuthContextType>({
+  supabaseUser: null,
   loading: true,
-  signIn: async () => null,
-  signOut: async () => null,
+  supabaseSignIn: async () => null,
+  supabaseSignOut: async () => null,
+  isAdmin: () => false,
 });
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any | null>(null);
+export function ExtendedAuthProvider({ children }: { children: React.ReactNode }) {
+  const [supabaseUser, setSupabaseUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const { data: session } = useSession();
 
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        setUser(session?.user ?? null);
+        setSupabaseUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
     // Initial session check
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+      setSupabaseUser(session?.user ?? null);
       setLoading(false);
     });
 
@@ -46,19 +50,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const signIn = (email: string, password: string) => {
+  const supabaseSignIn = (email: string, password: string) => {
     return supabase.auth.signInWithPassword({ email, password });
   };
 
-  const signOut = () => {
+  const supabaseSignOut = () => {
     return supabase.auth.signOut();
   };
 
+  const isAdmin = () => {
+    // Use either NextAuth session or Supabase user based on availability
+    const userEmail = session?.user?.email || supabaseUser?.email;
+    return userEmail?.endsWith('@seomax.com') || false;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <ExtendedAuthContext.Provider value={{ 
+      supabaseUser, 
+      loading, 
+      supabaseSignIn, 
+      supabaseSignOut,
+      isAdmin
+    }}>
       {children}
-    </AuthContext.Provider>
+    </ExtendedAuthContext.Provider>
   );
 }
 
-export const useAuth = () => useContext(AuthContext); 
+export const useExtendedAuth = () => useContext(ExtendedAuthContext); 

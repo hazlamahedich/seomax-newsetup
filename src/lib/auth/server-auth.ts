@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { auth } from "next-auth";
+import { getServerSession } from "next-auth";
 
 export async function getSession() {
-  return await auth();
+  return await getServerSession(authOptions);
 }
 
 export async function getCurrentUser() {
@@ -15,12 +15,13 @@ export async function getCurrentUser() {
 
 // Simple auth check based on a session cookie
 export async function requireAuth() {
-  const cookieStore = cookies();
-  const sessionToken = cookieStore.get('next-auth.session-token');
+  const session = await getSession();
   
-  if (!sessionToken) {
+  if (!session) {
     redirect('/login');
   }
+  
+  return session;
 }
 
 // Use this in server components to protect routes

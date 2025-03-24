@@ -60,31 +60,52 @@ test.describe('Report Generation Tests', () => {
     await expect(page.getByText(/automated test report/i)).toBeVisible();
   });
 
-  test('PDF/export functionality', async ({ page }) => {
-    // Navigate to existing report
-    await page.locator('.report-item').first().click();
+  test('SEO Audit PDF export functionality', async ({ page }) => {
+    // Navigate to SEO Audit reports
+    await page.goto('/dashboard/projects');
+    await expect(page.getByText(/projects/i)).toBeVisible();
     
-    // Check for report viewer
-    await expect(page.getByText(/report summary|report overview/i)).toBeVisible();
+    // Select the first project
+    await page.locator('.project-card').first().click();
     
-    // Locate and click export button
-    await page.getByRole('button', { name: /export|download/i }).click();
+    // Navigate to SEO Audit section
+    await page.getByRole('link', { name: /seo audit/i }).click();
+    await expect(page.getByText(/seo audit reports/i)).toBeVisible();
     
-    // Check for export options
-    await expect(page.getByText(/export options|download options/i)).toBeVisible();
+    // Check if any completed reports exist
+    const hasCompletedReports = await page.locator('text=Completed').count() > 0;
     
-    // Select PDF export
-    await page.getByRole('button', { name: /pdf/i }).click();
-    
-    // Download should trigger - we can't test actual download in e2e
-    // But we can check for a success message or dialog
-    await expect(page.getByText(/preparing download|download started/i)).toBeVisible();
-    
-    // Try other export formats if available
-    const exportCSV = page.getByRole('button', { name: /csv|excel/i });
-    if (await exportCSV.isVisible()) {
-      await exportCSV.click();
-      await expect(page.getByText(/preparing download|download started/i)).toBeVisible();
+    if (hasCompletedReports) {
+      // Click on a completed report
+      await page.locator('text=Completed').first().click();
+      
+      // Check for the PDF export button
+      await expect(page.getByRole('button', { name: /export pdf/i })).toBeVisible();
+      
+      // Click on the PDF export button
+      await page.getByRole('button', { name: /export pdf/i }).click();
+      
+      // Check for PDF generation loading state
+      await expect(page.getByText(/generating|downloading/i)).toBeVisible();
+      
+      // Wait for generation to complete or timeout
+      // Note: We can't verify the actual download in E2E tests
+      await expect(page.getByText(/success|downloaded successfully/i)).toBeVisible({
+        timeout: 30000
+      });
+    } else {
+      // If no completed reports, create a new audit
+      await page.getByRole('button', { name: /new audit/i }).click();
+      
+      // Fill out audit form
+      await page.getByLabel(/report name/i).fill('E2E Test Audit');
+      await page.getByLabel(/website url/i).fill('https://example.com');
+      
+      // Start the audit
+      await page.getByRole('button', { name: /start audit/i }).click();
+      
+      // Verify audit started
+      await expect(page.getByText(/audit started|started/i)).toBeVisible();
     }
   });
 

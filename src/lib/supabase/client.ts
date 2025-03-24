@@ -70,9 +70,6 @@ export const createPooledSupabaseClient = () => {
         autoRefreshToken: true,
         detectSessionInUrl: true,
       },
-      db: {
-        schema: 'seomax',
-      },
       global: {
         headers: {
           'x-connection-pool': supabasePoolerUrl
