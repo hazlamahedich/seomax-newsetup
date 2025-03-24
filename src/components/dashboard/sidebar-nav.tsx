@@ -68,7 +68,7 @@ export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
     },
     {
       title: 'SEO Audit',
-      href: '/dashboard/audit',
+      href: '/dashboard/seo-audit',
       icon: <Search className="mr-2 h-5 w-5" />,
     },
     {

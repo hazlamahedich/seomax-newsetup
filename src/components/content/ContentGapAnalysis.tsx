@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, AlertCircle, Search, Plus, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Search, Plus, CheckCircle, XCircle, TrendingUp, TrendingDown, BarChart } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ContentPageService } from '@/lib/services/content-service';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/use-toast';
+import { CompetitorAnalysisService, ContentGap, CompetitiveAdvantage, CompetitiveStrategy, CompetitorKeyword } from '@/lib/services/CompetitorAnalysisService';
+import { Progress } from '@/components/ui/progress';
 
 interface ContentGapAnalysisProps {
   contentPageId: string;
@@ -68,35 +70,73 @@ const mockCompetitors = [
   }
 ];
 
-// Mock content gaps based on competitor analysis
-const mockContentGaps = [
-  { topic: 'Mobile-first indexing', relevance: 'high', competitorsCovering: 2, description: 'Strategies for optimizing for mobile-first indexing' },
-  { topic: 'Voice search optimization', relevance: 'medium', competitorsCovering: 1, description: 'Techniques for optimizing content for voice searches' },
-  { topic: 'Core Web Vitals', relevance: 'high', competitorsCovering: 3, description: 'Performance metrics that affect search rankings' },
-  { topic: 'E-A-T principles', relevance: 'high', competitorsCovering: 2, description: 'Expertise, Authoritativeness, and Trustworthiness factors' },
-  { topic: 'Internal linking strategies', relevance: 'medium', competitorsCovering: 2, description: 'Strategic internal linking for SEO benefits' },
-  { topic: 'International SEO', relevance: 'low', competitorsCovering: 1, description: 'Optimizing content for multiple countries/languages' }
+// Update mock data to match the ContentGap interface
+const mockContentGaps: ContentGap[] = [
+  {
+    topic: "Mobile Optimization",
+    relevance: "high",
+    competitorsCovering: 4,
+    description: "Competitors are discussing the importance of mobile-first design for SEO rankings.",
+    suggestedImplementation: "Add a section on mobile optimization best practices and responsive design techniques." 
+  },
+  {
+    topic: "Voice Search Optimization",
+    relevance: "medium",
+    competitorsCovering: 3,
+    description: "Competitors are covering how to optimize content for voice search queries.",
+    suggestedImplementation: "Include conversational phrases and question-based headings that match voice search patterns."
+  },
+  {
+    topic: "Local SEO Factors",
+    relevance: "low",
+    competitorsCovering: 2,
+    description: "Some competitors discuss how local SEO affects search visibility.",
+    suggestedImplementation: "Add a short section about local SEO best practices if relevant to your audience."
+  }
 ];
 
-// Mock missing keywords based on competitor analysis
-const mockMissingKeywords = [
-  { keyword: 'mobile-first indexing', volume: 1800, difficulty: 45, competitorRank: 4 },
-  { keyword: 'core web vitals optimization', volume: 2200, difficulty: 62, competitorRank: 3 },
-  { keyword: 'e-a-t seo principles', volume: 1500, difficulty: 38, competitorRank: 5 },
-  { keyword: 'voice search optimization', volume: 1200, difficulty: 55, competitorRank: 7 },
-  { keyword: 'international seo guide', volume: 900, difficulty: 48, competitorRank: 8 }
+// Update mock data to match the CompetitorKeyword interface
+const mockMissingKeywords: CompetitorKeyword[] = [
+  {
+    keyword: "content optimization",
+    volume: 5400,
+    difficulty: 68,
+    density: 1.2,
+    inTitle: false,
+    inHeadings: false
+  },
+  {
+    keyword: "seo best practices",
+    volume: 9200,
+    difficulty: 72,
+    density: 0,
+    inTitle: false,
+    inHeadings: true
+  },
+  {
+    keyword: "keyword research",
+    volume: 12500,
+    difficulty: 45,
+    density: 0.3,
+    inTitle: false,
+    inHeadings: false
+  }
 ];
 
 export function ContentGapAnalysis({ contentPageId, onBack }: ContentGapAnalysisProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [contentPage, setContentPage] = useState<any>(null);
   const [competitors, setCompetitors] = useState(mockCompetitors);
-  const [contentGaps, setContentGaps] = useState(mockContentGaps);
-  const [missingKeywords, setMissingKeywords] = useState(mockMissingKeywords);
+  const [contentGaps, setContentGaps] = useState<ContentGap[]>([]);
+  const [missingKeywords, setMissingKeywords] = useState<CompetitorKeyword[]>([]);
+  const [advantages, setAdvantages] = useState<CompetitiveAdvantage[]>([]);
+  const [disadvantages, setDisadvantages] = useState<CompetitiveAdvantage[]>([]);
+  const [strategies, setStrategies] = useState<CompetitiveStrategy[]>([]);
   const [activeTab, setActiveTab] = useState('competitors');
   const [error, setError] = useState<string | null>(null);
   const [searchUrl, setSearchUrl] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
     loadContentData();
@@ -110,17 +150,69 @@ export function ContentGapAnalysis({ contentPageId, onBack }: ContentGapAnalysis
       const page = await ContentPageService.getContentPage(contentPageId);
       setContentPage(page);
       
-      // In a real implementation, you would fetch actual competitor data
-      // For this demo, we're using mock data
+      // Load project ID
+      const projectId = page.project_id;
+      
+      // Load competitors
+      const competitorsData = await CompetitorAnalysisService.getCompetitors(projectId);
+      if (competitorsData && competitorsData.length > 0) {
+        setCompetitors(competitorsData.map(comp => ({
+          id: comp.id || '',
+          url: comp.url,
+          title: comp.title,
+          keyPoints: comp.strengths || [],
+          keywords: comp.keywords?.map(k => k.keyword) || [],
+          wordCount: comp.metrics?.wordCount || 0,
+          readabilityScore: comp.metrics?.readabilityScore || 0,
+          keywordDensity: comp.metrics?.keywordDensity || 0
+        })));
+        
+        // Run competitive analysis if we have competitors
+        await runCompetitiveAnalysis(projectId, page.url);
+      }
+      
       setIsLoading(false);
     } catch (err) {
-      setError('Failed to load content data');
       console.error('Error loading content:', err);
+      setError('Failed to load content data');
       setIsLoading(false);
     }
   };
 
-  const handleAddCompetitor = () => {
+  const runCompetitiveAnalysis = async (projectId: string, url: string) => {
+    setIsAnalyzing(true);
+    try {
+      const result = await CompetitorAnalysisService.runCompetitiveAnalysis(projectId, url);
+      
+      // Update state with results
+      setContentGaps(result.contentGaps);
+      setMissingKeywords(result.keywordGaps);
+      setAdvantages(result.advantages);
+      setDisadvantages(result.disadvantages);
+      setStrategies(result.strategies);
+      
+      // Show success message
+      toast({
+        title: "Analysis Complete",
+        description: "Competitive analysis has been completed successfully.",
+      });
+    } catch (error) {
+      console.error('Error analyzing competitors:', error);
+      // Fall back to mock data
+      setContentGaps(mockContentGaps);
+      setMissingKeywords(mockMissingKeywords);
+      
+      toast({
+        title: "Analysis Issue",
+        description: "Using sample data due to analysis limitations.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleAddCompetitor = async () => {
     if (!searchUrl.trim()) {
       toast({
         title: "URL Required",
@@ -132,39 +224,46 @@ export function ContentGapAnalysis({ contentPageId, onBack }: ContentGapAnalysis
     
     setIsSearching(true);
     
-    // Simulate API call to analyze competitor
-    setTimeout(() => {
-      // In a real implementation, this would be an API call
-      // to analyze the competitor content
+    try {
+      // Add the competitor using the service
+      const projectId = contentPage.project_id;
+      const newCompetitor = await CompetitorAnalysisService.addCompetitor(projectId, searchUrl);
       
-      // For this demo, we'll just add a mock competitor
-      const newCompetitor = {
-        id: `comp${competitors.length + 1}`,
-        url: searchUrl,
-        title: `Competitor Content ${competitors.length + 1}`,
-        keyPoints: [
-          'Sample key point 1',
-          'Sample key point 2',
-          'Sample key point 3'
-        ],
-        keywords: ['sample keyword 1', 'sample keyword 2', 'sample keyword 3'],
-        wordCount: Math.floor(1500 + Math.random() * 2000),
-        readabilityScore: Math.floor(70 + Math.random() * 20),
-        keywordDensity: 1 + Math.random()
-      };
-      
-      setCompetitors([...competitors, newCompetitor]);
-      setSearchUrl('');
-      setIsSearching(false);
-      
+      if (newCompetitor) {
+        // Add to the UI list
+        setCompetitors([...competitors, {
+          id: newCompetitor.id || '',
+          url: newCompetitor.url,
+          title: newCompetitor.title,
+          keyPoints: [],
+          keywords: [],
+          wordCount: newCompetitor.contentLength || 0,
+          readabilityScore: 0,
+          keywordDensity: 0
+        }]);
+        
+        setSearchUrl('');
+        
+        toast({
+          title: "Competitor Added",
+          description: "The competitor content has been added for analysis.",
+        });
+        
+        // Re-run the analysis with the new competitor
+        await runCompetitiveAnalysis(projectId, contentPage.url);
+      } else {
+        throw new Error("Failed to add competitor");
+      }
+    } catch (error) {
+      console.error('Error adding competitor:', error);
       toast({
-        title: "Competitor Added",
-        description: "The competitor content has been analyzed and added.",
+        title: "Failed to Add Competitor",
+        description: "There was an error adding the competitor for analysis.",
+        variant: "destructive"
       });
-      
-      // In a real implementation, you would also update the gaps and keywords
-      // based on the new competitor analysis
-    }, 1500);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   if (isLoading) {
@@ -248,168 +347,442 @@ export function ContentGapAnalysis({ contentPageId, onBack }: ContentGapAnalysis
             <Button 
               onClick={handleAddCompetitor} 
               disabled={isSearching || !searchUrl.trim()}
-              className="flex items-center"
             >
               {isSearching ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Analyzing...
+                </>
               ) : (
-                <Plus className="h-4 w-4 mr-2" />
+                <>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Competitor
+                </>
               )}
-              Add
             </Button>
           </div>
         </CardContent>
       </Card>
       
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="mb-4">
+      {isAnalyzing && (
+        <Card>
+          <CardContent className="flex items-center justify-center py-6">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mr-4" />
+            <div>
+              <p className="font-medium">Running Competitive Analysis</p>
+              <p className="text-sm text-muted-foreground">This may take a few moments...</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid grid-cols-5 w-full">
           <TabsTrigger value="competitors">Competitors</TabsTrigger>
-          <TabsTrigger value="content-gaps">Content Gaps</TabsTrigger>
+          <TabsTrigger value="advantages">Advantages</TabsTrigger>
+          <TabsTrigger value="gaps">Content Gaps</TabsTrigger>
           <TabsTrigger value="keywords">Missing Keywords</TabsTrigger>
+          <TabsTrigger value="strategies">Strategies</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="competitors">
-          <div className="space-y-4">
-            {competitors.map(competitor => (
-              <Card key={competitor.id}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{competitor.title}</CardTitle>
-                  <CardDescription className="truncate">
-                    <a href={competitor.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                      {competitor.url}
+        {/* Competitors Tab */}
+        <TabsContent value="competitors" className="space-y-4 mt-6">
+          {competitors.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+                <AlertCircle className="h-10 w-10 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No Competitors Added</h3>
+                <p className="text-muted-foreground mb-4">
+                  Add competitor URLs to analyze and compare with your content.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            competitors.map((competitor) => (
+              <Card key={competitor.id} className="overflow-hidden">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">
+                    <a 
+                      href={competitor.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="hover:underline"
+                    >
+                      {competitor.title}
                     </a>
+                  </CardTitle>
+                  <CardDescription className="truncate">
+                    {competitor.url}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-sm font-medium mb-1">Word Count</p>
-                      <p className="text-muted-foreground">{competitor.wordCount.toLocaleString()} words</p>
+                <CardContent className="pb-3">
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="flex flex-col">
+                      <span className="text-sm text-muted-foreground">Word Count</span>
+                      <span className="text-lg font-medium">{competitor.wordCount.toLocaleString()}</span>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium mb-1">Readability Score</p>
-                      <p className="text-muted-foreground">{competitor.readabilityScore}/100</p>
+                    <div className="flex flex-col">
+                      <span className="text-sm text-muted-foreground">Readability</span>
+                      <span className="text-lg font-medium">{competitor.readabilityScore}/100</span>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium mb-1">Keyword Density</p>
-                      <p className="text-muted-foreground">{competitor.keywordDensity.toFixed(1)}%</p>
+                    <div className="flex flex-col">
+                      <span className="text-sm text-muted-foreground">Keyword Density</span>
+                      <span className="text-lg font-medium">{competitor.keywordDensity.toFixed(2)}%</span>
                     </div>
                   </div>
                   
-                  <Separator />
+                  {competitor.keyPoints && competitor.keyPoints.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium mb-2">Key Points</h4>
+                      <ul className="list-disc pl-5 text-sm space-y-1">
+                        {competitor.keyPoints.slice(0, 3).map((point, index) => (
+                          <li key={index}>{point}</li>
+                        ))}
+                        {competitor.keyPoints.length > 3 && (
+                          <li className="text-muted-foreground">
+                            +{competitor.keyPoints.length - 3} more points
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
                   
-                  <div>
-                    <h4 className="text-sm font-medium mb-2">Key Points</h4>
-                    <ul className="space-y-1">
-                      {competitor.keyPoints.map((point, index) => (
-                        <li key={index} className="text-sm text-muted-foreground">
-                          • {point}
-                        </li>
-                      ))}
-                    </ul>
+                  {competitor.keywords && competitor.keywords.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium mb-2">Target Keywords</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {competitor.keywords.slice(0, 5).map((keyword, index) => (
+                          <Badge key={index} variant="secondary">
+                            {keyword}
+                          </Badge>
+                        ))}
+                        {competitor.keywords.length > 5 && (
+                          <Badge variant="outline">
+                            +{competitor.keywords.length - 5} more
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+        
+        {/* Advantages Tab */}
+        <TabsContent value="advantages" className="space-y-4 mt-6">
+          {advantages.length === 0 && disadvantages.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+                <AlertCircle className="h-10 w-10 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No Competitive Analysis</h3>
+                <p className="text-muted-foreground mb-4">
+                  Add competitors and run analysis to see your advantages and disadvantages.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <h3 className="text-lg font-medium">Competitive Advantages</h3>
+              {advantages.length === 0 ? (
+                <p className="text-muted-foreground">No clear advantages identified.</p>
+              ) : (
+                advantages.map((advantage, index) => (
+                  <Card key={index}>
+                    <CardContent className="pt-6">
+                      <div className="flex items-start gap-4">
+                        <div className="bg-green-50 p-2 rounded-full">
+                          <TrendingUp className="h-4 w-4 text-green-500" />
+                        </div>
+                        <div>
+                          <h4 className="font-medium mb-1">{advantage.area}</h4>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            {advantage.description}
+                          </p>
+                          
+                          {advantage.competitorComparison && (
+                            <div className="bg-muted p-3 rounded-md text-sm">
+                              <p className="font-medium mb-1">Comparison:</p>
+                              <ul className="space-y-1">
+                                {Object.entries(advantage.competitorComparison).map(([key, value]) => (
+                                  <li key={key}>
+                                    <span className="text-muted-foreground">{key}:</span> {value}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+              
+              <h3 className="text-lg font-medium mt-8">Competitive Disadvantages</h3>
+              {disadvantages.length === 0 ? (
+                <p className="text-muted-foreground">No significant disadvantages identified.</p>
+              ) : (
+                disadvantages.map((disadvantage, index) => (
+                  <Card key={index}>
+                    <CardContent className="pt-6">
+                      <div className="flex items-start gap-4">
+                        <div className="bg-red-50 p-2 rounded-full">
+                          <TrendingDown className="h-4 w-4 text-red-500" />
+                        </div>
+                        <div>
+                          <h4 className="font-medium mb-1">{disadvantage.area}</h4>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            {disadvantage.description}
+                          </p>
+                          
+                          {disadvantage.competitorComparison && (
+                            <div className="bg-muted p-3 rounded-md text-sm">
+                              <p className="font-medium mb-1">Comparison:</p>
+                              <ul className="space-y-1">
+                                {Object.entries(disadvantage.competitorComparison).map(([key, value]) => (
+                                  <li key={key}>
+                                    <span className="text-muted-foreground">{key}:</span> {value}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </>
+          )}
+        </TabsContent>
+        
+        {/* Content Gaps Tab */}
+        <TabsContent value="gaps" className="space-y-4 mt-6">
+          {contentGaps.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+                <AlertCircle className="h-10 w-10 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No Content Gaps Identified</h3>
+                <p className="text-muted-foreground mb-4">
+                  Add competitors to identify content gaps and opportunities.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            contentGaps.map((gap, index) => (
+              <Card key={index}>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium">{gap.topic}</h4>
+                    <Badge variant={gap.relevance === 'high' ? 'destructive' : gap.relevance === 'medium' ? 'default' : 'outline'}>
+                      {gap.relevance.charAt(0).toUpperCase() + gap.relevance.slice(1)} Relevance
+                    </Badge>
                   </div>
                   
-                  <Separator />
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {gap.description}
+                  </p>
                   
-                  <div>
-                    <h4 className="text-sm font-medium mb-2">Keywords</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {competitor.keywords.map((keyword, index) => (
-                        <Badge key={index} variant="secondary">{keyword}</Badge>
-                      ))}
-                    </div>
+                  <div className="bg-muted p-3 rounded-md text-sm">
+                    <p className="font-medium mb-2">Implementation Guidance:</p>
+                    <p>{gap.suggestedImplementation}</p>
+                  </div>
+                  
+                  <div className="mt-4">
+                    <p className="text-sm text-muted-foreground mb-1">
+                      {gap.competitorsCovering} out of {competitors.length} competitors cover this topic
+                    </p>
+                    <Progress 
+                      value={(gap.competitorsCovering / Math.max(1, competitors.length)) * 100} 
+                      className="h-2"
+                    />
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
+            ))
+          )}
         </TabsContent>
         
-        <TabsContent value="content-gaps">
-          <Card>
-            <CardHeader>
-              <CardTitle>Content Gap Analysis</CardTitle>
-              <CardDescription>
-                Topics covered by competitors that are missing from your content
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {contentGaps.map((gap, index) => (
-                  <div key={index} className="p-4 border rounded-md space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-medium">{gap.topic}</h3>
-                      <Badge className={
-                        gap.relevance === 'high' ? 'bg-red-500' : 
-                        gap.relevance === 'medium' ? 'bg-amber-500' : 
-                        'bg-blue-500'
-                      }>
-                        {gap.relevance.charAt(0).toUpperCase() + gap.relevance.slice(1)} Relevance
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{gap.description}</p>
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <span>Covered by {gap.competitorsCovering} competitor{gap.competitorsCovering !== 1 ? 's' : ''}</span>
-                    </div>
-                  </div>
+        {/* Missing Keywords Tab */}
+        <TabsContent value="keywords" className="space-y-4 mt-6">
+          {missingKeywords.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+                <AlertCircle className="h-10 w-10 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No Missing Keywords Identified</h3>
+                <p className="text-muted-foreground mb-4">
+                  Add competitors to identify keyword gaps and opportunities.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {missingKeywords.map((keyword, index) => (
+                  <Card key={index}>
+                    <CardContent className="pt-6">
+                      <h4 className="font-medium text-lg mb-2">{keyword.keyword}</h4>
+                      
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Monthly Volume</p>
+                          <p className="font-medium">{(keyword.volume || 0).toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Difficulty</p>
+                          <p className="font-medium">{keyword.difficulty || "Unknown"}/100</p>
+                        </div>
+                      </div>
+                      
+                      {keyword.inTitle === false && keyword.inHeadings === false && (
+                        <div className="bg-amber-50 text-amber-800 p-3 rounded-md text-sm mt-4">
+                          <p>This keyword is completely missing from your content.</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          )}
         </TabsContent>
         
-        <TabsContent value="keywords">
-          <Card>
-            <CardHeader>
-              <CardTitle>Missing Keywords</CardTitle>
-              <CardDescription>
-                Keywords used by competitors that are missing from your content
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="py-2 px-4 text-left font-medium">Keyword</th>
-                      <th className="py-2 px-4 text-left font-medium">Search Volume</th>
-                      <th className="py-2 px-4 text-left font-medium">Difficulty</th>
-                      <th className="py-2 px-4 text-left font-medium">Competitor Rank</th>
-                      <th className="py-2 px-4 text-left font-medium">Present in Content</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {missingKeywords.map((keyword, index) => (
-                      <tr key={index} className="border-b">
-                        <td className="py-3 px-4">{keyword.keyword}</td>
-                        <td className="py-3 px-4">{keyword.volume.toLocaleString()}</td>
-                        <td className="py-3 px-4">
-                          <Badge className={
-                            keyword.difficulty > 60 ? 'bg-red-500' : 
-                            keyword.difficulty > 40 ? 'bg-amber-500' : 
-                            'bg-green-500'
-                          }>
-                            {keyword.difficulty}/100
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4">{keyword.competitorRank}</td>
-                        <td className="py-3 px-4">
-                          <div className="flex justify-center">
-                            <XCircle className="h-5 w-5 text-red-500" />
+        {/* Strategies Tab */}
+        <TabsContent value="strategies" className="space-y-4 mt-6">
+          {strategies.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+                <AlertCircle className="h-10 w-10 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No Strategies Available</h3>
+                <p className="text-muted-foreground mb-4">
+                  Add competitors and run analysis to get strategic recommendations.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-2">Quick Wins</h3>
+                <div className="space-y-4">
+                  {strategies
+                    .filter(s => s.timeFrame === 'quick')
+                    .map((strategy, index) => (
+                      <Card key={index}>
+                        <CardContent className="pt-6">
+                          <div className="flex items-start gap-4">
+                            <div className="bg-blue-50 p-2 rounded-full">
+                              <BarChart className="h-4 w-4 text-blue-500" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-medium">{strategy.title}</h4>
+                                <Badge variant={
+                                  strategy.priority === 'high' ? 'destructive' : 
+                                  strategy.priority === 'medium' ? 'default' : 'outline'
+                                }>
+                                  {strategy.priority} priority
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground mb-4">
+                                {strategy.description}
+                              </p>
+                              
+                              <div className="bg-muted p-3 rounded-md text-sm">
+                                <p className="font-medium mb-1">Implementation:</p>
+                                <p>{strategy.implementation}</p>
+                              </div>
+                            </div>
                           </div>
-                        </td>
-                      </tr>
+                        </CardContent>
+                      </Card>
                     ))}
-                  </tbody>
-                </table>
+                </div>
               </div>
-            </CardContent>
-            <CardFooter>
-              <Button className="w-full">
-                Add Selected Keywords to Content Brief
-              </Button>
-            </CardFooter>
-          </Card>
+              
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-2">Medium-Term Strategies</h3>
+                <div className="space-y-4">
+                  {strategies
+                    .filter(s => s.timeFrame === 'medium')
+                    .map((strategy, index) => (
+                      <Card key={index}>
+                        <CardContent className="pt-6">
+                          <div className="flex items-start gap-4">
+                            <div className="bg-purple-50 p-2 rounded-full">
+                              <BarChart className="h-4 w-4 text-purple-500" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-medium">{strategy.title}</h4>
+                                <Badge variant={
+                                  strategy.priority === 'high' ? 'destructive' : 
+                                  strategy.priority === 'medium' ? 'default' : 'outline'
+                                }>
+                                  {strategy.priority} priority
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground mb-4">
+                                {strategy.description}
+                              </p>
+                              
+                              <div className="bg-muted p-3 rounded-md text-sm">
+                                <p className="font-medium mb-1">Implementation:</p>
+                                <p>{strategy.implementation}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-medium mb-2">Long-Term Strategies</h3>
+                <div className="space-y-4">
+                  {strategies
+                    .filter(s => s.timeFrame === 'long-term')
+                    .map((strategy, index) => (
+                      <Card key={index}>
+                        <CardContent className="pt-6">
+                          <div className="flex items-start gap-4">
+                            <div className="bg-green-50 p-2 rounded-full">
+                              <BarChart className="h-4 w-4 text-green-500" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-medium">{strategy.title}</h4>
+                                <Badge variant={
+                                  strategy.priority === 'high' ? 'destructive' : 
+                                  strategy.priority === 'medium' ? 'default' : 'outline'
+                                }>
+                                  {strategy.priority} priority
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground mb-4">
+                                {strategy.description}
+                              </p>
+                              
+                              <div className="bg-muted p-3 rounded-md text-sm">
+                                <p className="font-medium mb-1">Implementation:</p>
+                                <p>{strategy.implementation}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  
+                  {strategies.filter(s => s.timeFrame === 'long-term').length === 0 && (
+                    <p className="text-muted-foreground">No long-term strategies identified at this time.</p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>

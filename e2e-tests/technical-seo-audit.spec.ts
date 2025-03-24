@@ -211,4 +211,83 @@ test.describe('Technical SEO Audit Process', () => {
     // Check for sitemap validation results
     await expect(page.getByText(/validation results/i)).toBeVisible();
   });
+
+  test('create new technical SEO audit', async ({ page }) => {
+    // Click on "New Audit" button
+    await page.getByRole('button', { name: /new audit/i }).click();
+    
+    // Fill in website details
+    await page.getByLabel(/website url/i).fill('https://example.com');
+    await page.getByLabel(/audit name/i).fill('Test Technical SEO Audit');
+    
+    // Start the audit
+    await page.getByRole('button', { name: /start audit/i }).click();
+    
+    // Wait for audit to complete (may take time)
+    await page.waitForSelector('.audit-complete', { timeout: 60000 });
+    
+    // Verify audit completed successfully
+    await expect(page.getByText(/audit complete/i)).toBeVisible();
+    await expect(page.getByText(/technical seo score/i)).toBeVisible();
+  });
+  
+  test('robots.txt and sitemap validation', async ({ page }) => {
+    // Navigate to existing audit
+    await page.locator('.audit-item').first().click();
+    
+    // Check for robots.txt analysis
+    await expect(page.getByText(/robots\.txt/i)).toBeVisible();
+    
+    // Check for sitemap analysis
+    await expect(page.getByText(/sitemap\.xml/i)).toBeVisible();
+    
+    // Verify details are shown
+    await page.getByText(/robots\.txt/i).click();
+    await expect(page.getByText(/disallow/i)).toBeVisible();
+  });
+  
+  test('HTTP/2 protocol implementation check', async ({ page }) => {
+    // Navigate to existing audit
+    await page.locator('.audit-item').first().click();
+    
+    // Check for HTTP/2 section in overview
+    await expect(page.getByText(/HTTP\/2 Implementation/i)).toBeVisible();
+    
+    // Check implementation status
+    const status = await page.getByText(/HTTP\/2 (Implemented|Not Implemented)/i).textContent();
+    expect(status).toBeTruthy();
+    
+    // Look for benefits list if not implemented
+    if (status?.includes('Not Implemented')) {
+      await expect(page.getByText(/Benefits of HTTP\/2/i)).toBeVisible();
+      await expect(page.getByText(/Multiplexed connections/i)).toBeVisible();
+    }
+    
+    // Check for badge showing status
+    await expect(page.locator('div:has-text("HTTP/2 Implementation") ~ div').getByRole('status')).toBeVisible();
+  });
+  
+  test('JavaScript and CSS minification check', async ({ page }) => {
+    // Navigate to existing audit
+    await page.locator('.audit-item').first().click();
+    
+    // Check for Resource Optimization section in overview
+    await expect(page.getByText(/Resource Optimization/i)).toBeVisible();
+    
+    // Check for JavaScript status
+    await expect(page.getByText(/JavaScript Status/i)).toBeVisible();
+    const jsStatus = await page.getByText(/JavaScript Status/i).locator('..').getByText(/(Minified|Not Minified)/i).textContent();
+    expect(jsStatus).toBeTruthy();
+    
+    // Check for CSS status
+    await expect(page.getByText(/CSS Status/i)).toBeVisible();
+    const cssStatus = await page.getByText(/CSS Status/i).locator('..').getByText(/(Minified|Not Minified)/i).textContent();
+    expect(cssStatus).toBeTruthy();
+    
+    // Look for minification benefits if needed
+    if (jsStatus?.includes('Not Minified') || cssStatus?.includes('Not Minified')) {
+      await expect(page.getByText(/Minification Benefits/i)).toBeVisible();
+      await expect(page.getByText(/Reduced file size/i)).toBeVisible();
+    }
+  });
 }); 

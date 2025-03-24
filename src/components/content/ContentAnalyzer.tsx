@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, Check, AlertCircle, RefreshCw, FileText, Key, Layout, Info } from 'lucide-react';
+import { Loader2, Check, AlertCircle, RefreshCw, FileText, Key, Layout, Info, Image, Link } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -150,7 +150,7 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
 
     return (
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid grid-cols-3 mb-4">
+        <TabsList className="grid grid-cols-5 mb-4">
           <TabsTrigger value="readability" className="flex items-center">
             <FileText className="h-4 w-4 mr-2" />
             Readability
@@ -162,6 +162,14 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
           <TabsTrigger value="structure" className="flex items-center">
             <Layout className="h-4 w-4 mr-2" />
             Structure
+          </TabsTrigger>
+          <TabsTrigger value="images" className="flex items-center">
+            <Image className="h-4 w-4 mr-2" />
+            Images
+          </TabsTrigger>
+          <TabsTrigger value="links" className="flex items-center">
+            <Link className="h-4 w-4 mr-2" />
+            Links
           </TabsTrigger>
         </TabsList>
 
@@ -175,6 +183,14 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
 
         <TabsContent value="structure" className="space-y-4">
           {renderStructureAnalysis()}
+        </TabsContent>
+
+        <TabsContent value="images" className="space-y-4">
+          {renderImageAltTextAnalysis()}
+        </TabsContent>
+
+        <TabsContent value="links" className="space-y-4">
+          {renderInternalLinkingAnalysis()}
         </TabsContent>
       </Tabs>
     );
@@ -400,6 +416,238 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
           <CardFooter>
             <p className="text-sm text-muted-foreground">{structureAnalysis.analysis_summary}</p>
           </CardFooter>
+        </Card>
+      </>
+    );
+  };
+
+  const renderImageAltTextAnalysis = () => {
+    if (!analysis?.image_alt_text_analysis) {
+      return (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center p-8 min-h-[300px]">
+            <Image className="h-16 w-16 text-muted-foreground mb-4" />
+            <h3 className="text-xl font-semibold mb-2">Image Alt Text Analysis</h3>
+            <p className="text-muted-foreground text-center mb-4">
+              No image alt text analysis available for this content.
+            </p>
+            <Button onClick={handleAnalyzeContent}>Run Analysis</Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    const imageAnalysis = analysis.image_alt_text_analysis;
+    
+    return (
+      <>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              Image Alt Text Score
+              <Badge variant={getScoreBadgeVariant(imageAnalysis.altTextQualityScore)}>
+                {imageAnalysis.altTextQualityScore}/100
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Analysis of image accessibility and SEO optimization
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium mb-1">Total Images</p>
+                <p className="text-muted-foreground">{imageAnalysis.totalImages}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-1">Images With Alt Text</p>
+                <p className="text-muted-foreground">{imageAnalysis.imagesWithAlt} ({imageAnalysis.totalImages > 0 ? Math.round(imageAnalysis.imagesWithAlt / imageAnalysis.totalImages * 100) : 0}%)</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-1">Descriptive Score</p>
+                <p className="text-muted-foreground">{imageAnalysis.descriptiveScore}%</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-1">Keyword Usage</p>
+                <p className="text-muted-foreground">{imageAnalysis.keywordUsage}%</p>
+              </div>
+            </div>
+            
+            {imageAnalysis.totalImages > 0 && (
+              <>
+                <Separator />
+                
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Image Analysis</h4>
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-2">Image</th>
+                          <th className="text-left py-2">Alt Text</th>
+                          <th className="text-left py-2">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {imageAnalysis.imgSrcAnalysis.map((img, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="py-2">
+                              <div className="w-16 h-16 bg-gray-100 flex items-center justify-center rounded overflow-hidden">
+                                <img 
+                                  src={img.src} 
+                                  alt={img.altText || 'No alt text'} 
+                                  className="max-w-full max-h-full object-contain"
+                                  onError={(e) => (e.currentTarget.src = '/placeholder-image.svg')}
+                                />
+                              </div>
+                            </td>
+                            <td className="py-2">
+                              {img.altText ? (
+                                <p className="text-sm">{img.altText}</p>
+                              ) : (
+                                <p className="text-sm text-amber-600">No alt text</p>
+                              )}
+                              {img.suggestedAltText && (
+                                <p className="text-xs text-green-600 mt-1">
+                                  Suggested: {img.suggestedAltText}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-2">
+                              {img.hasAlt ? (
+                                img.isDescriptive ? (
+                                  <Badge variant="success">Good</Badge>
+                                ) : (
+                                  <Badge variant="warning">Improve</Badge>
+                                )
+                              ) : (
+                                <Badge variant="destructive">Missing</Badge>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                
+                <Separator />
+              </>
+            )}
+            
+            <div>
+              <h4 className="text-sm font-medium mb-2">Improvement Areas</h4>
+              <ul className="space-y-2">
+                {imageAnalysis.improvementSuggestions.map((suggestion, index) => (
+                  <li key={index} className="text-sm text-muted-foreground flex items-start">
+                    <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
+                    {suggestion}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      </>
+    );
+  };
+
+  const renderInternalLinkingAnalysis = () => {
+    if (!analysis?.internal_linking_analysis) {
+      return (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center p-8 min-h-[300px]">
+            <Link className="h-16 w-16 text-muted-foreground mb-4" />
+            <h3 className="text-xl font-semibold mb-2">Internal Linking Analysis</h3>
+            <p className="text-muted-foreground text-center mb-4">
+              No internal linking analysis available for this content.
+            </p>
+            <Button onClick={handleAnalyzeContent}>Run Analysis</Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    const linkingAnalysis = analysis.internal_linking_analysis;
+    
+    return (
+      <>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              Internal Linking Score
+              <Badge variant={getScoreBadgeVariant(linkingAnalysis.linkDistributionScore)}>
+                {linkingAnalysis.linkDistributionScore}/100
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Analysis of content's internal linking structure
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium mb-1">Outgoing Links</p>
+                <p className="text-muted-foreground">{linkingAnalysis.outgoingLinks || 0}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-1">Incoming Links</p>
+                <p className="text-muted-foreground">{linkingAnalysis.incomingLinks || 0}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-1">Broken Links</p>
+                <p className="text-muted-foreground">{linkingAnalysis.brokenLinks || 0}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-1">Link Context Quality</p>
+                <p className="text-muted-foreground">{linkingAnalysis.linkContextQuality || 'Not analyzed'}</p>
+              </div>
+            </div>
+            
+            {linkingAnalysis.linkedPages && linkingAnalysis.linkedPages.length > 0 && (
+              <>
+                <Separator />
+                
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Linked Pages</h4>
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-2">Page</th>
+                          <th className="text-left py-2">Link Type</th>
+                          <th className="text-left py-2">Anchor Text</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {linkingAnalysis.linkedPages.map((link, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="py-2 truncate max-w-[200px]">{link.url}</td>
+                            <td className="py-2">{link.type}</td>
+                            <td className="py-2 truncate max-w-[200px]">{link.anchorText}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                
+                <Separator />
+              </>
+            )}
+            
+            <div>
+              <h4 className="text-sm font-medium mb-2">Improvement Areas</h4>
+              <ul className="space-y-2">
+                {linkingAnalysis.improvementSuggestions.map((suggestion, index) => (
+                  <li key={index} className="text-sm text-muted-foreground flex items-start">
+                    <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
+                    {suggestion}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </CardContent>
         </Card>
       </>
     );

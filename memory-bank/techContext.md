@@ -1,278 +1,80 @@
 # Technical Context
 
-## Technologies Used
+## Tech Stack
 
-### Frontend
-- **Next.js 15+**: Using the App Router for improved performance and routing capabilities
-- **React 18**: For component-based UI development with the latest features
-- **TypeScript**: For type safety across the codebase
-- **Tailwind CSS**: For utility-first styling
-- **shadcn/ui**: For high-quality UI components with Tailwind integration
-- **Framer Motion**: For smooth animations and transitions
-- **Recharts**: For data visualization
-- **Zustand**: For client-side state management
-- **React Query**: For server state management and data fetching
-- **Axios**: For HTTP requests with consistent error handling
+The SEOMax application is built on a modern tech stack:
 
-### Backend
-- **Supabase**: For authentication, database, and storage
-  - PostgreSQL: For relational data storage
-  - Row-Level Security (RLS): For fine-grained data access control
-  - Supabase Pooler: For high-traffic database connections 
-- **Next.js API Routes**: For serverless API endpoints
-- **Edge Functions**: For global low-latency functionality
+- **Frontend**: Next.js 15+ with App Router
+- **UI**: Tailwind CSS with shadcn/ui components
+- **Backend**: Next.js API Routes and Server Components
+- **Database**: Supabase (PostgreSQL)
+- **Authentication**: NextAuth.js with Supabase adapter
+- **State Management**: React Query for server state, Zustand for client state
+- **AI/LLM Integration**: LangChain for structured AI interactions
+- **SEO Analysis**: Custom services with Cheerio for HTML parsing
+- **Chart Visualization**: Recharts
+- **Form Handling**: React Hook Form with Zod validation
+- **Animation**: Framer Motion
+- **PDF Generation**: jsPDF with html2canvas
+- **Testing**: Jest with React Testing Library, Playwright for E2E
 
-### AI and Analysis
-- **LangChain**: For AI orchestration and prompt management
-- **OpenAI**: For content analysis and optimization suggestions
-- **Node.js Workers**: For background processing of SEO analysis tasks
+## Architecture
 
-### Testing
-- **Jest**: For unit and integration testing
-- **React Testing Library**: For component testing
-- **Playwright**: For end-to-end testing
-- **Storybook**: For component documentation and visual testing
-- **MSW (Mock Service Worker)**: For API mocking
+SEOMax follows a modern web application architecture designed for scalability and maintainability:
 
-### DevOps
-- **GitHub Actions**: For CI/CD pipelines
-- **Vercel**: For hosting and deployment
-- **Docker**: For containerized development and testing
+1. **Frontend Architecture**
+   - Next.js App Router with React Server Components
+   - Clear separation between server and client components
+   - Folder-based routing structure
+   - Layout components for consistent UI
+   - Client-side interactivity with React hooks and state management
 
-## Development Setup
+2. **Backend Architecture**
+   - API Routes for data operations
+   - Server Components for server-side rendering
+   - Service layer for business logic
+   - Repository pattern for data access
+   - Middleware for request processing
 
-### Environment Variables
-```
-NEXT_PUBLIC_SUPABASE_URL=<your-supabase-url>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
-NEXT_PUBLIC_SUPABASE_POOLER_URL=<your-supabase-pooler-url>
-OPENAI_API_KEY=<your-openai-api-key>
-NEXT_PUBLIC_SITE_URL=<your-site-url>
-```
+3. **Database Architecture**
+   - PostgreSQL with Supabase
+   - Row-Level Security (RLS) for permissions
+   - Foreign key relationships for data integrity
+   - Indexes for query performance
+   - Migrations for schema changes
 
-### Database Schema
-The main tables in our Supabase database:
-- **users**: User profiles and preferences
-- **websites**: Websites being analyzed
-- **pages**: Individual pages within websites
-- **seo_audits**: SEO audit results
-- **content_analyses**: Content analysis results
-- **keywords**: Tracked keywords and rankings
-- **user_feedback**: Feedback submitted by users
+4. **Authentication Architecture**
+   - NextAuth.js for authentication flow
+   - JWT-based session management
+   - Middleware for route protection
+   - Supabase adapter for credential storage
 
-### Performance Considerations
-- Use of connection pooling for database performance under load
-- Implementation of optimistic updates for responsive UI
-- Strategic use of React Query for caching and revalidation
-- Incremental Static Regeneration for frequently accessed pages
-- Edge functions for global low-latency operations
-- Proper indexing on database tables for query performance
+5. **SEO Analysis Architecture**
+   - Service-based approach for modularity
+   - Specialized analyzers for different SEO aspects
+   - Crawling capabilities with pagination
+   - Scoring system for SEO health assessment
+   - Recommendation generation based on findings
 
-## Technical Constraints
-
-### Supabase Integration
-- Authentication tied to Supabase Auth
-- Database operations follow Supabase patterns and constraints
-- RLS policies must be carefully designed for security
-- Session pooler requires proper connection management
-
-### Browser Compatibility
-- Support for modern browsers (Chrome, Firefox, Safari, Edge)
-- Progressive enhancement for older browsers
-- Mobile-first approach for responsive design
-
-### Performance Requirements
-- Page load times under 1.5 seconds
-- Time to Interactive under 3 seconds
-- Lighthouse score above 90 for all categories
-- Smooth animations (60fps)
-
-### AI Integration
-- Rate limiting for API calls to OpenAI
-- Fallback mechanisms for AI service interruptions
-- Caching of AI responses when appropriate
-
-## Data Flow Architecture
-
-### Content Analysis Flow
-1. User submits content for analysis
-2. Content is processed through various analysis engines:
-   - Readability analysis
-   - Keyword usage analysis
-   - Structure analysis
-   - Competitor analysis
-3. Results are stored in the database
-4. UI updates with analysis results and recommendations
-
-### SEO Audit Flow
-1. User adds a website for analysis
-2. Site crawler discovers pages and structure
-3. Each page is analyzed for technical SEO factors
-4. Results are aggregated and stored
-5. UI displays issues and recommendations
-
-### Feedback System Flow
-1. User submits feedback through the feedback dialog
-2. Feedback is stored in the database with user information
-3. Admin users can review and manage feedback
-4. Feedback statistics are calculated for administrative overview
-
-## Dependencies
-Major dependencies and their purposes:
-
-```json
-{
-  "dependencies": {
-    "@radix-ui/react-icons": "For accessible icons",
-    "@supabase/auth-helpers-nextjs": "For Supabase auth integration",
-    "@supabase/supabase-js": "For Supabase client operations",
-    "axios": "For HTTP requests",
-    "class-variance-authority": "For component styling variants",
-    "clsx": "For conditional class names",
-    "framer-motion": "For animations",
-    "langchain": "For AI orchestration",
-    "lucide-react": "For icon set",
-    "next": "React framework",
-    "react": "UI library",
-    "react-dom": "DOM rendering for React",
-    "react-query": "For data fetching and caching",
-    "recharts": "For data visualization",
-    "tailwind-merge": "For Tailwind class merging",
-    "tailwindcss-animate": "For Tailwind animations",
-    "zustand": "For state management"
-  },
-  "devDependencies": {
-    "@playwright/test": "For E2E testing",
-    "@testing-library/jest-dom": "For DOM testing utilities",
-    "@testing-library/react": "For React component testing",
-    "@types/node": "TypeScript definitions",
-    "@types/react": "TypeScript definitions",
-    "autoprefixer": "For CSS compatibility",
-    "eslint": "For code linting",
-    "eslint-config-next": "ESLint Next.js config",
-    "jest": "For unit testing",
-    "msw": "For API mocking",
-    "postcss": "For CSS processing",
-    "tailwindcss": "For utility CSS",
-    "typescript": "For type checking"
-  }
-}
-```
+6. **Local SEO Analysis Architecture** (New)
+   - Dedicated `LocalSEOService` for local business SEO assessment
+   - Specialized analysis methods for NAP consistency, GBP detection, schema validation
+   - Integration with `SEOAnalysisIntegration` for cohesive analysis
+   - Database schema for local SEO analysis results
+   - API route for triggering and refreshing analysis
 
 ## Development Setup
 
 ### Environment Requirements
-- Node.js 18+
-- npm/yarn
-- Supabase account for database
-- OpenAI API key for AI features
-
-### Environment Variables
-- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anonymous key
-- `OPENAI_API_KEY`: OpenAI API key
-- `NEXT_PUBLIC_APP_URL`: Base URL of the application
-
-### Local Development
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Start the development server: `npm run dev`
-4. Run tests: `npm test`
-5. Run E2E tests: `npm run test:e2e`
-
-## Technical Constraints
-
-### Performance
-- Optimizing AI request latency for content analysis
-- Managing state rehydration for large datasets
-- Limiting bundle size for fast initial load
-
-### Security
-- Protected API routes with authentication
-- Rate limiting for public endpoints
-- Secure handling of API keys
-
-### Scalability
-- Optimizing database queries for large datasets
-- Chunking large content for analysis
-- Efficient storage of historical data
-
-## Dependencies
-
-### Core Dependencies
-- React and Next.js ecosystem
-- Supabase JS client
-- LangChain for AI integration
-
-### Development Dependencies
-- TypeScript
-- ESLint and Prettier
-- Jest and React Testing Library
-- Playwright for E2E testing
-- Storybook (planned)
-
-## CI/CD Pipeline
-
-### GitHub Actions Workflows
-- Build validation
-- Unit and integration tests
-- End-to-end tests
-- Linting and type checking
-
-### Deployment
-- Vercel for frontend deployment
-- Supabase for backend services
-
-## Core Technologies
-
-### Frontend Framework
-- **Next.js**: v15+ with App Router architecture
-- **React**: Core UI library with server and client components
-- **TypeScript**: For type-safe code development
-
-### Styling
-- **Tailwind CSS**: Utility-first CSS framework
-- **shadcn/ui**: Component library built on Radix UI
-- **Framer Motion**: For animations and transitions
-
-### State Management
-- **React Query (TanStack Query)**: For server state management, data fetching, and caching
-- **Zustand**: For client-side state management
-- **React Context**: For theme and authentication state
-
-### Database & Backend
-- **Supabase**: PostgreSQL database with authentication services
-- **Next-Auth**: For authentication with Supabase as credentials provider
-- **PostgreSQL**: Relational database through Supabase
-
-### AI Integration
-- **LangChain**: For structured AI prompt workflows
-- **OpenAI**: GPT-4 model access through LangChain
-- **Structured Output Parsing**: For consistent AI response handling
-
-### Data Visualization
-- **Recharts**: For performance graphs and analytics
-- **D3.js**: For topic cluster visualization
-- **react-flow**: For node-based relationship mapping
-
-### Testing
-- **Jest**: Testing framework
-- **React Testing Library**: For component testing
-- **Mock Service Worker**: For API mocking in tests
-
-## Development Setup
-
-### Environment Requirements
-- Node.js v18+ (preferably v20+)
-- npm or yarn package manager
-- Git for version control
-- OpenAI API key for AI services
-- Supabase project with configured tables
+- Node.js v18+
+- npm 9+ or yarn 1.22+
+- PostgreSQL (via Supabase)
+- Supabase CLI (optional, for local development)
 
 ### Environment Variables
 ```
-# Next.js
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
+# Base
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Authentication
 NEXTAUTH_URL=http://localhost:3000
@@ -283,95 +85,242 @@ NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
-# OpenAI
+# LLM Providers
 OPENAI_API_KEY=your-openai-api-key
+ANTHROPIC_API_KEY=your-anthropic-api-key
 ```
 
-### Local Development
-1. Clone repository
-2. Install dependencies: `npm install`
-3. Set up environment variables in `.env.local`
-4. Run development server: `npm run dev`
-5. Access application at `http://localhost:3000`
+### Development Commands
+```
+# Install dependencies
+npm install
 
-### Database Schema
-Key tables in Supabase:
-- **users**: User profiles
-- **projects**: SEO projects
-- **keywords**: Keyword research data
-- **content_pages**: Content pieces being analyzed
-- **content_analysis**: Analysis results for content
-- **content_suggestions**: SEO suggestions for content
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
+
+# Run tests
+npm test
+
+# E2E tests
+npm run test:e2e
+```
+
+## Deployment
+
+The application is deployed using Vercel with the following configuration:
+
+1. **Build Settings**
+   - Framework Preset: Next.js
+   - Build Command: `npm run build`
+   - Output Directory: `.next`
+
+2. **Environment Variables**
+   - All environment variables from development setup
+   - Production-specific values for URLs and API keys
+
+3. **Edge Functions**
+   - Authentication middleware deployed as Edge function
+   - API routes optimized for Edge runtime
+
+4. **Serverless Functions**
+   - Compute-intensive operations deployed as serverless functions
+   - Memory limits adjusted for large operations
+
+## Database Schema
+
+The database schema includes the following key tables:
+
+1. **Users and Authentication**
+   - `auth.users`: User accounts
+   - `auth.sessions`: User sessions
+   - `public.user_profiles`: Extended user information
+
+2. **Projects and Organization**
+   - `projects`: SEO projects
+   - `project_members`: User-project relationships
+   - `organizations`: Business organizations
+   - `organization_members`: User-organization relationships
+
+3. **SEO Analysis**
+   - `site_crawls`: Record of site crawling operations
+   - `crawled_pages`: Individual pages from crawls
+   - `seo_analyses`: Overall SEO analysis results
+   - `technical_seo_analyses`: Technical SEO results
+   - `content_analyses`: Content analysis results
+   - `backlink_analyses`: Backlink analysis results
+   - `social_media_analyses`: Social media metrics
+   - `localseo_analyses`: Local SEO analysis results (New)
+
+4. **Keywords and Content**
+   - `keywords`: Target keywords
+   - `keyword_rankings`: Historical ranking data
+   - `content_briefs`: AI-generated content briefs
+   - `content_optimizations`: Content improvement tracking
+
+5. **LLM Management**
+   - `llm_models`: Model configurations
+   - `llm_usage`: Token usage tracking
+   - `llm_prompts`: Stored prompt templates
+
+## API Structure
+
+The API is structured with the following endpoints:
+
+1. **Authentication**
+   - `/api/auth/[...nextauth]`: NextAuth.js routes
+
+2. **Projects**
+   - `/api/projects`: CRUD operations for projects
+   - `/api/projects/[id]/members`: Project member management
+
+3. **SEO Analysis**
+   - `/api/analyze/technical-seo`: Technical SEO analysis
+   - `/api/analyze/content`: Content analysis
+   - `/api/analyze/backlinks`: Backlink analysis
+   - `/api/analyze/social-media`: Social media analysis
+   - `/api/analyze/local-seo`: Local SEO analysis (New)
+
+4. **Keywords**
+   - `/api/keywords`: Keyword management
+   - `/api/keywords/rankings`: Ranking data
+   - `/api/keywords/suggestions`: AI suggestions
+
+5. **Content**
+   - `/api/content/briefs`: Content brief generation
+   - `/api/content/optimize`: Content optimization
+
+6. **LLM Management**
+   - `/api/llm/models`: Model configuration
+   - `/api/llm/usage`: Usage statistics
+   - `/api/llm/test`: Model testing
+
+## Dependencies
+
+### Core Dependencies
+- `next`: 15.0.0
+- `react`: 18.2.0
+- `react-dom`: 18.2.0
+- `tailwindcss`: 3.3.0
+- `@supabase/supabase-js`: 2.10.0
+- `next-auth`: 4.24.0
+- `@tanstack/react-query`: 5.0.0
+- `zustand`: 4.4.1
+- `langchain`: 0.0.150
+- `cheerio`: 1.0.0-rc.12
+- `date-fns`: 2.30.0
+- `zod`: 3.22.2
+
+### UI Dependencies
+- `@radix-ui/react-*`: Various UI primitives
+- `class-variance-authority`: 0.7.0
+- `clsx`: 2.0.0
+- `framer-motion`: 10.16.4
+- `lucide-react`: 0.294.0
+- `tailwind-merge`: 1.14.0
+- `recharts`: 2.9.0
+
+### Dev Dependencies
+- `typescript`: 5.2.2
+- `@types/react`: 18.2.21
+- `@types/node`: 20.6.0
+- `eslint`: 8.49.0
+- `prettier`: 3.0.3
+- `jest`: 29.6.2
+- `@testing-library/react`: 14.0.0
+- `@playwright/test`: 1.38.0
+
+### Local SEO Dependencies (New)
+- Uses existing `cheerio` for HTML parsing
+- Leverages `SchemaMarkupService` for JSON-LD validation
+- Works with `GradingSystemService` for scoring
+
+## Testing Strategy
+
+The project employs a comprehensive testing strategy:
+
+1. **Unit Testing**
+   - Jest for JavaScript/TypeScript testing
+   - React Testing Library for component testing
+   - Mock service worker for API mocking
+   - Coverage targets for critical code paths
+
+2. **Integration Testing**
+   - API route testing with supertest
+   - Component integration with React Testing Library
+   - Database operations with test databases
+
+3. **End-to-End Testing**
+   - Playwright for full E2E testing
+   - Critical user journeys automated
+   - Visual regression testing
+
+4. **Local SEO Testing Strategy** (New)
+   - Unit tests for each analyzer method
+   - Mock HTML fixtures for testing detection patterns
+   - Integration tests with SEO analysis flow
+   - E2E tests for local SEO analysis page
 
 ## Technical Constraints
 
-### AI Service Limitations
-- **Rate Limits**: OpenAI API has token and request limits
-- **Response Time**: AI analysis can take 5-30 seconds depending on content length
-- **Token Costs**: Longer content analysis has higher token costs
-- **Consistency**: AI response quality may vary despite structured prompts
+1. **Performance**
+   - Optimize for Core Web Vitals
+   - Large site analysis requires pagination
+   - LLM API rate limits
 
-### Performance Considerations
-- **Hydration**: Next.js hydration can be affected by browser extensions
-  - Resolved with `suppressHydrationWarning` on html/body elements
-- **API Timeouts**: Supabase and OpenAI requests may timeout
-  - Implement timeout handling and graceful degradation
-- **Bundle Size**: Monitor client bundle size with large dependencies
-- **Content Size**: Large content pieces may affect analysis performance
+2. **Security**
+   - Row-Level Security in Supabase
+   - Environment variable protection
+   - API route authentication
+   - CSRF protection
 
-### Browser Compatibility
-- Targets modern browsers (Chrome, Firefox, Safari, Edge)
-- Minimal compatibility with IE11 (not actively supported)
+3. **Scalability**
+   - Database connection pooling
+   - Caching for frequently accessed data
+   - Optimistic UI updates
+   - Background processing for intensive operations
 
-### Deployment Requirements
-- Node.js hosting environment
-- Environment variables for API keys and secrets
-- Database connection to Supabase
-- Memory allocation for AI service calls
+4. **Browser Compatibility**
+   - Support for modern browsers (last 2 versions)
+   - Graceful degradation for older browsers
+   - Responsive design for all device sizes
 
-## Architectural Decisions
+## Local SEO Implementation (New)
 
-### Server Components vs. Client Components
-- Server Components for data fetching and initial rendering
-- Client Components for interactive elements
-- "use client" directive clearly marks client components
+The Local SEO implementation expands SEOMax's capabilities to assess business location-specific SEO factors:
 
-### Error Handling Strategy
-- Try/catch blocks around all data fetching operations
-- Fallback UI components for error states
-- Structured error messages for user guidance
-- Error logging for debugging and monitoring
+1. **Core Functionality**
+   - NAP (Name, Address, Phone) consistency checker
+   - Google Business Profile detection
+   - LocalBusiness schema.org validation
+   - Local keyword usage analysis
+   - Maps embed detection
 
-### Authentication Flow
-- Next-Auth with Supabase Credentials provider
-- Protected routes via middleware
-- Session persistence with cookies
-- Automatic redirection for unauthenticated users
+2. **Technical Implementation**
+   - `LocalSEOService` class with specialized analysis methods
+   - Database schema extensions for storing analysis results
+   - API route for triggering analysis
+   - Integration with existing SEO analysis flow
+   - UI components for displaying results
 
-### Content Analysis Pipeline
-- Content submission → Initial analysis → Competitor comparison → Suggestions
-- Background processing for long-running tasks
-- Persistent storage of analysis results
-- Incremental updates for content changes
+3. **Data Flow**
+   - Site pages crawled and analyzed for local signals
+   - HTML parsed with Cheerio for DOM traversal
+   - Schema.org markup extracted and validated
+   - Contact details pattern-matched across pages
+   - Google Business Profile links detected
+   - Map embeds identified and verified
+   - Results scored and stored in database
+   - Recommendations generated based on findings
 
-## Known Issues and Workarounds
-
-1. **React Hydration Errors**
-   - **Issue**: Browser extensions like Grammarly modify DOM, causing hydration mismatches
-   - **Solution**: Added `suppressHydrationWarning` to html and body elements
-
-2. **Session Fetch Errors**
-   - **Issue**: "Unexpected end of JSON input" errors during session fetching
-   - **Solution**: Implemented fallback session data and timeout handling
-
-3. **Supabase Client Export**
-   - **Issue**: Missing `createClient` export in Supabase client file
-   - **Solution**: Added proper export of `createClient` function
-
-4. **TypeScript-LangChain Integration**
-   - **Issue**: Type definitions for custom LangChain outputs
-   - **Solution**: Created custom type declarations for structured outputs
-
-5. **Testing Environment Setup**
-   - **Issue**: Missing module declarations for testing libraries
-   - **Solution**: Add type definitions for Jest and Testing Library 
+4. **Technical Considerations**
+   - NAP format normalization to handle variations
+   - Schema validation against LocalBusiness specification
+   - Address matching with fuzzy comparison
+   - Local keyword context analysis
+   - Integration with PDFGenerationService for reports 

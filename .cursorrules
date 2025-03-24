@@ -15,6 +15,9 @@
 - Content analysis runs in stages: readability → keyword usage → structure → suggestions
 - End-to-end tests follow critical user journeys with Playwright
 - PDF generation for SEO audit reports follows a sequence: fetch report data → create PDF instance → add branding → generate content → save as data URI → trigger download
+- Technical SEO analysis follows a standardized flow: site data collection → element validation → issue identification → score calculation → recommendation generation
+- Local SEO analysis follows a specific flow: NAP extraction → schema validation → Google Business Profile detection → local keyword analysis → map embed verification → scoring
+- Competitive analysis follows a structured approach: URL scraping → content extraction → metrics calculation → storage → comparison analysis → gap identification → strategy generation → tabbed results display
 
 ## User Preferences
 - Clear, actionable suggestions for content optimization
@@ -22,6 +25,8 @@
 - Simplified UI for complex analysis tasks
 - Quick access to most important metrics from dashboard
 - Professional PDF reports with clear structure and actionable information
+- Severity-based issue organization for technical SEO elements
+- Business information validation for local SEO elements
 
 ## Project-Specific Patterns
 - Component files follow naming pattern: [Functionality][ComponentType].tsx
@@ -32,6 +37,8 @@
 - Testing uses React Testing Library with Jest for unit/integration tests and Playwright for E2E tests
 - E2E tests are grouped by functionality with separate spec files
 - Test fixtures provide reusable test data and helper functions
+- Technical SEO service uses static methods for all analysis operations
+- Local SEO service follows service class pattern with static methods for each analysis component
 
 ## PDF Generation Patterns
 - PDFGenerationService implements static methods for modular PDF creation
@@ -41,6 +48,54 @@
 - PDF button component handles generation state (idle, loading, success, error) with visual feedback
 - PDF downloads use proper browser security policies with data URIs and temporary link elements
 - Error handling includes graceful fallbacks and user notifications via toast
+- Local SEO analysis integrated into PDF reports with specialized sections
+
+## Technical SEO Component Patterns
+- Uses a tabbed interface with categories: Overview, Issues, Checks, Trends
+- Issues are categorized by severity (critical, high, medium, low, info) with corresponding colors
+- Each technical element (robots.txt, sitemap, etc.) has its own card with status indicator
+- Progress components show score percentages with color-coded indicators
+- Charts use consistent color schemes for historical trends
+- Static data structure for technical checks with standardized properties
+
+## Local SEO Component Patterns
+- Similar tabbed interface approach as Technical SEO
+- NAP consistency display with formatting to highlight differences
+- Google Business Profile detection with status indicators
+- Schema markup validation with code highlighting for LocalBusiness schema
+- Map embed detection with visual indicators for implementation status
+- Local keyword context analysis with usage highlighting
+- Component-specific scores with weighted calculation for overall score
+- Formatted business information display with validation status indicators
+- Recommendation cards with priority levels and implementation guidance
+
+## Competitive Analysis Patterns
+- CompetitorAnalysisService implements static methods for all operations:
+  - getCompetitors for retrieving competitor data
+  - addCompetitor for adding new competitors
+  - runCompetitiveAnalysis for comprehensive analysis
+- ContentGapAnalysis component uses a tabbed interface for organized results display:
+  - Competitors tab for listing and managing competitors
+  - Advantages tab for showing competitive edges
+  - Content Gaps tab for identifying missing topics
+  - Missing Keywords tab for keyword opportunities
+  - Strategies tab for actionable recommendations
+- REST API endpoints follow standard HTTP methods:
+  - GET for retrieving competitors
+  - POST for adding competitors or running analysis
+  - DELETE for removing competitors
+- Database structure uses separate tables for different analysis aspects:
+  - competitors table for competitor information
+  - content_gaps table for identified content topics
+  - competitive_advantages table for strengths/weaknesses
+  - competitive_strategies table for recommendations
+- Analysis workflow follows a sequential process:
+  - Scrape competitor content → Extract metrics → Store data → Compare with user content → Identify gaps → Generate strategies
+- UI design uses consistent patterns:
+  - Card-based presentation for analysis results
+  - Progress indicators for metric comparisons
+  - Color-coded badges for urgency/priority levels (high, medium, low)
+  - Loading states with skeleton UI for asynchronous operations
 
 ## Known Challenges
 - Hydration errors can occur with browser extensions like Grammarly
@@ -57,6 +112,12 @@
   - Solution: Implement pagination and optimize content rendering
 - PDF exports in different browsers may render slightly differently
   - Solution: Use HTML2Canvas for consistent rendering across browsers
+- Technical SEO analysis may time out for very large sites
+  - Solution: Implement progressive scanning with pagination
+- NAP consistency checking may fail with formatting variations
+  - Solution: Implement normalization functions for phone numbers and addresses
+- LocalBusiness schema validation requires specialized logic for different schema formats
+  - Solution: Use SchemaMarkupService with LocalBusiness schema extensions
 
 ## Evolution of Decisions
 - Moved from route handlers to server components for data fetching
@@ -67,6 +128,9 @@
 - Expanded testing strategy from unit tests to comprehensive E2E tests
 - Implemented centralized Zustand stores for feature-specific state management
 - Moved from direct component state to Zustand for SEO audit reports and PDF generation
+- Refactored technical SEO service to use static methods for better testability
+- Added Local SEO analysis as a specialized component of the overall SEO assessment
+- Integrated Local SEO with PDF report generation for comprehensive reports
 
 ## Troubleshooting Tips
 - If encountering hydration errors, check DOM modifications from browser extensions
@@ -77,6 +141,11 @@
 - For E2E test failures, ensure test users exist and dev server is running
 - If PDF generation fails, check browser console for jsPDF or HTML2Canvas errors
 - For PDF styling issues, inspect the scale and dimensions set in the PDFGenerationService
+- Technical SEO service issues are usually related to CORS or network timeouts
+- Local SEO analysis may fail on sites with inconsistent NAP formatting
+  - Check normalization functions in LocalSEOService
+- Schema validation issues often relate to missing or malformed LocalBusiness properties
+  - Inspect schema extraction logic in SchemaMarkupService integration
 
 ## Code Conventions
 - Use named exports for components and functions
@@ -86,4 +155,7 @@
 - Handle loading and error states for all data-dependent components
 - Test files follow the pattern: [filename].test.tsx for unit/integration tests and [feature].spec.ts for E2E tests
 - Service classes use static methods for utility functions
-- PDF generation follows a modular approach with separate methods for different sections 
+- PDF generation follows a modular approach with separate methods for different sections
+- Technical SEO components use consistent naming for status indicators: "success", "warning", "error", "neutral" 
+- Local SEO components follow the same naming conventions and patterns as Technical SEO components
+- Analyzer functions follow the pattern: analyze[Feature]([parameters]): [ReturnType] 
