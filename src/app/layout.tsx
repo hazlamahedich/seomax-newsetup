@@ -6,6 +6,7 @@ import { ThemeProvider } from '@/components/providers/theme-provider';
 import { Providers } from '@/app/providers';
 import { FeedbackDialog } from '@/components/ui/feedback-dialog';
 import { Toaster } from '@/components/ui/toaster';
+import { Toaster as ReactHotToastToaster } from 'react-hot-toast';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -42,6 +43,7 @@ export default function RootLayout({
             
             {/* Toast notifications */}
             <Toaster />
+            <ReactHotToastToaster position="bottom-right" />
           </ThemeProvider>
         </Providers>
       </body>

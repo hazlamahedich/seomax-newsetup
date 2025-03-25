@@ -1,33 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks';
-import { createClient } from '@supabase/supabase-js';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useExtendedAuth } from '@/components/providers/auth-provider';
+import { supabase } from '@/lib/supabase/client';
+import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   BarChart3, 
   FileText, 
   Globe, 
-  LayoutDashboard, 
-  Link2, 
   Plus, 
   Search, 
-  Settings, 
   Zap,
   Loader2
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-
-// Create a Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+import { debugSessionInfo } from '@/lib/auth/session-utils';
 
 interface Project {
   id: string;
@@ -38,12 +30,13 @@ interface Project {
 }
 
 export default function DashboardPage() {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { supabaseUser: user, isAdmin, getActiveUser } = useExtendedAuth();
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageLoaded, setPageLoaded] = useState(false);
   const [interactive, setInteractive] = useState(false);
+  const authCheckRun = useRef(false);
 
   // SEO metrics (sample data)
   const [seoScore, setSeoScore] = useState(78);
@@ -59,19 +52,32 @@ export default function DashboardPage() {
     referral: 432 
   });
   
-  // Redirect if not authenticated
+  // Enhanced debug logging - but do it only once
   useEffect(() => {
-    // Only run if authentication is ready (not in loading state)
-    if (!authLoading) {
-      // If user is authenticated, fetch their projects
-      if (user) {
-        fetchProjects();
-      } else {
-        // If not authenticated and done loading, redirect to login
-        router.push('/login');
-      }
+    if (authCheckRun.current) return;
+    authCheckRun.current = true;
+    
+    // Use the debug utility
+    debugSessionInfo('Dashboard');
+    
+    // Check for active user
+    const activeUser = getActiveUser();
+    
+    if (activeUser) {
+      console.log('[Dashboard] Active user found:', activeUser.email);
+    } else {
+      console.log('[Dashboard] No active user from auth hook');
     }
-  }, [user, authLoading, router]);
+  }, [getActiveUser]);
+  
+  // Fetch projects when user is available
+  useEffect(() => {
+    const activeUser = getActiveUser();
+    if (activeUser) {
+      console.log('[Dashboard] Fetching projects for user:', activeUser.email);
+      fetchProjects(activeUser);
+    }
+  }, [getActiveUser]);
   
   // Set page as loaded after initial data fetch
   useEffect(() => {
@@ -95,9 +101,9 @@ export default function DashboardPage() {
       return () => clearTimeout(timer);
     }
   }, [loading]);
-  
-  const fetchProjects = async () => {
-    if (!user) return;
+
+  const fetchProjects = async (activeUser: any) => {
+    if (!activeUser) return;
     
     try {
       setLoading(true);
@@ -120,11 +126,20 @@ export default function DashboardPage() {
         return;
       }
       
-      // If the table check passed, fetch the user's projects
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('user_id', user.id);
+      // If the table check passed, fetch projects
+      // Use admin status to determine which projects to fetch
+      let projectsQuery = supabase.from('projects').select('*');
+      
+      // Only filter by user_id if not admin
+      const userIsAdmin = isAdmin?.() || activeUser.email?.endsWith('@seomax.com');
+      
+      if (!userIsAdmin) {
+        projectsQuery = projectsQuery.eq('user_id', activeUser.id);
+      } else {
+        console.log('[Dashboard] Admin user detected. Fetching all projects.');
+      }
+      
+      const { data, error } = await projectsQuery.order('created_at', { ascending: false });
         
       if (error) {
         console.error('Error fetching projects:', error);
@@ -149,11 +164,6 @@ export default function DashboardPage() {
       setLoading(false);
     }
   };
-  
-  const handleSignOut = async () => {
-    await signOut();
-    router.push('/');
-  };
 
   // Animation variants
   const fadeIn = {
@@ -164,31 +174,21 @@ export default function DashboardPage() {
       transition: { duration: 0.4 }
     }
   };
-  
-  const staggerContainer = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
 
-  const listItemVariants = {
-    hidden: { opacity: 0, x: -20 },
-    visible: (i: number) => ({
-      opacity: 1,
-      x: 0,
-      transition: {
-        delay: 0.1 * i,
-        duration: 0.4
-      }
-    })
-  };
+  const activeUser = getActiveUser();
+  if (!activeUser) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-24">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Loading user information...</h1>
+          <p>Please wait while we retrieve your information.</p>
+        </div>
+      </div>
+    );
+  }
 
-  // Show loading spinner while auth is checking or data is loading
-  if (authLoading || (loading && !interactive)) {
+  // Show loading spinner while data is loading
+  if (loading && !interactive) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -201,8 +201,6 @@ export default function DashboardPage() {
 
   return (
     <div className="container py-6">
-      {/* Debug Navigation Panel - REMOVED */}
-      
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -210,7 +208,10 @@ export default function DashboardPage() {
       >
         <div className="flex flex-col space-y-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Dashboard
+              {isAdmin() && <span className="ml-2 text-blue-500 text-sm">(Admin)</span>}
+            </h1>
             <Button asChild>
               <Link href="/dashboard/projects/new">
                 <Plus className="mr-2 h-4 w-4" /> New Project
@@ -351,13 +352,4 @@ export default function DashboardPage() {
       </motion.div>
     </div>
   );
-}
-
-// Helper functions for random demo data
-function getRandomScore() {
-  return Math.floor(Math.random() * 30) + 60;
-}
-
-function getRandomNumber(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
 } 

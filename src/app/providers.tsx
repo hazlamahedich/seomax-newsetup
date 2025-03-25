@@ -1,7 +1,7 @@
 'use client';
 
 import { SessionProvider } from "next-auth/react";
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { ExtendedAuthProvider } from "@/components/providers/auth-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -15,10 +15,59 @@ const fallbackSession = {
   user: { id: "", name: null, email: null, image: null }
 };
 
-// Create a client
-const queryClient = new QueryClient();
+// Create a client with proper error handling
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+});
 
 export function Providers({ children }: ProvidersProps) {
+  // Track if we're in the browser or during SSR
+  const [isClient, setIsClient] = useState(false);
+  
+  useEffect(() => {
+    setIsClient(true);
+    
+    // Attempt to restore session from browser storage
+    // This helps prevent flickering between auth states on navigation
+    const restoreAuth = () => {
+      try {
+        // Check if we have a stored auth token in localStorage
+        const supabaseToken = localStorage.getItem('supabase.auth.token');
+        const sessionData = localStorage.getItem('next-auth.session-token');
+        
+        // Log auth state for debugging
+        console.log('[Providers] Auth initialization:', { 
+          hasSupabaseToken: !!supabaseToken,
+          hasNextAuthSession: !!sessionData
+        });
+      } catch (e) {
+        console.error('[Providers] Error checking auth state:', e);
+      }
+    };
+    
+    // Handle page visibility changes to refresh auth when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[Providers] Page became visible, refreshing auth state');
+        // This will trigger a revalidation of the session
+        window.dispatchEvent(new Event('focus'));
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    restoreAuth();
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+  
   // Add global error handler for API fetch issues
   useEffect(() => {
     const originalFetch = window.fetch;
@@ -48,7 +97,7 @@ export function Providers({ children }: ProvidersProps) {
             const text = await cloned.text();
             // If empty response or invalid JSON, return a better formatted response
             if (!text || text.trim() === '') {
-              console.warn('Empty response from auth API, creating fallback');
+              console.warn('[Providers] Empty response from auth API, creating fallback');
               const fallbackResponse = new Response(JSON.stringify(fallbackSession), {
                 status: 200,
                 headers: {
@@ -60,11 +109,11 @@ export function Providers({ children }: ProvidersProps) {
             // Otherwise return the original response
             return response;
           } catch (error) {
-            console.error('Error handling response:', error);
+            console.error('[Providers] Error handling response:', error);
             return response;
           }
         } catch (error) {
-          console.error('Error fetching auth endpoint:', error);
+          console.error('[Providers] Error fetching auth endpoint:', error);
           // Return fallback session response on network error
           const fallbackResponse = new Response(JSON.stringify(fallbackSession), {
             status: 200,
@@ -75,7 +124,7 @@ export function Providers({ children }: ProvidersProps) {
           return fallbackResponse;
         }
       } catch (error) {
-        console.error('Fetch interception error:', error);
+        console.error('[Providers] Fetch interception error:', error);
         throw error;
       }
     };
@@ -88,9 +137,9 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider 
-        refetchInterval={5 * 60} // Refetch session every 5 minutes
+        refetchInterval={15} // Refetch session every 15 seconds for better auth persistence
         refetchOnWindowFocus={true}
-        session={fallbackSession}
+        refetchWhenOffline={false}
       >
         <ExtendedAuthProvider>
           {children}

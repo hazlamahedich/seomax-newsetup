@@ -1,8 +1,11 @@
 // Export all hooks from this file for easier imports
-import { useAuth } from './useAuth.tsx';
+import { useAuth as useOldAuth } from './useAuth.tsx';
 import { useSupabaseAuth } from './useAuth.ts';
 import { useAuthHook } from './auth-hooks';
+import { useExtendedAuth } from '@/components/providers/auth-provider';
 
-// Export hooks with proper naming to avoid conflicts
-// Note: TypeScript will resolve the imports during compilation
-export { useAuth, useSupabaseAuth, useAuthHook }; 
+// Re-export the enhanced auth hook as useAuth for backward compatibility
+export const useAuth = useExtendedAuth;
+
+// Export other hooks with proper naming to avoid conflicts
+export { useSupabaseAuth, useAuthHook }; 
