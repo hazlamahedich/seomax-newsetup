@@ -4,12 +4,11 @@ import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { z } from "zod";
+import { liteLLMProvider } from "./litellm-provider";
 
-// Initialize OpenAI model
-const model = new ChatOpenAI({
-  temperature: 0.7,
-  modelName: "gpt-4",
-});
+// Use the centralized LLM provider instead of directly initializing
+// This ensures proper API key management and usage tracking
+const model = liteLLMProvider.getLangChainModel();
 
 // Define keyword research prompt
 const keywordResearchPrompt = PromptTemplate.fromTemplate(`

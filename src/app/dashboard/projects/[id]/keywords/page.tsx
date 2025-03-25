@@ -8,7 +8,7 @@ interface KeywordsPageProps {
   };
 }
 
-export default function KeywordsPage({ params }: KeywordsPageProps) {
+export default async function KeywordsPage({ params }: KeywordsPageProps) {
   const projectId = params.id;
   
   return (
