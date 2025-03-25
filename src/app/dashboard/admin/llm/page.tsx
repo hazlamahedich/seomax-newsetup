@@ -84,7 +84,10 @@ import { Label } from "@/components/ui/label";
 import { initializeDefaultModel } from "./initialize-model";
 
 // Define the form schema for adding a new LLM model
-const formSchema = LLMModelSchema.pick({
+const formSchema = LLMModelSchema.extend({
+  // Override the optional fields with defaults to ensure they're always defined
+  costPerThousandTokens: z.number().positive().default(10),
+}).pick({
   name: true,
   provider: true,
   modelName: true,
@@ -364,59 +367,385 @@ export default function LLMManagementPage() {
     }
   };
 
-  // Effect to set initial model when models are loaded
+  // Update the useEffect to both load models and ensure valid selection
   useEffect(() => {
-    if (models.length > 0 && !selectedModelId) {
-      setSelectedModelId(models[0]?.id || "");
+    if (models.length > 0) {
+      // Check if the currently selected model exists in the list
+      const modelExists = models.some(model => model.id === selectedModelId);
+      
+      // If the current selection doesn't exist, select the first available model
+      if (!modelExists) {
+        console.log("Selected model not found in list, selecting first available model");
+        setSelectedModelId(models[0].id);
+      }
     }
   }, [models, selectedModelId]);
 
   // Handle test prompt submission
   const handleTestPrompt = async () => {
-    if (!selectedModelId || !testPrompt.trim()) {
+    if (!selectedModelId || !testPrompt) {
       toast({
-        title: "Validation Error",
-        description: "Please select a model and enter a prompt",
+        title: "Missing information",
+        description: "Please select a model and enter a prompt to test.",
         variant: "destructive",
       });
       return;
     }
     
+    // Find the selected model details
+    const selectedModel = models.find(m => m.id === selectedModelId);
+    
+    // Verify the model exists before attempting to use it
+    const modelExists = !!selectedModel;
+    if (!modelExists) {
+      toast({
+        title: "Warning",
+        description: "The selected model wasn't found in the local list. We'll try to use it directly.",
+      });
+    } else {
+      // If model exists in UI but might not be in DB, try to cache it to ensure it's available
+      try {
+        console.log("Pre-caching model to ensure availability:", selectedModel.name);
+        const cacheResponse = await fetch("/api/llm/cache-model", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: selectedModel })
+        });
+        
+        if (!cacheResponse.ok) {
+          console.warn("Warning: Failed to cache model, but continuing anyway:", await cacheResponse.text());
+        } else {
+          console.log("Model cached successfully");
+        }
+      } catch (cacheError) {
+        console.error("Error pre-caching model:", cacheError);
+        // Continue anyway - the test might still work
+      }
+    }
+    
     setTestLoading(true);
     setTestResponse("");
     
+    // Log selected model for debugging
+    console.log("Testing with model ID:", selectedModelId);
+    console.log("Available models:", models);
+    console.log("Selected model details:", selectedModel);
+    
     try {
-      // Find the selected model
-      const model = models.find(m => m.id === selectedModelId);
-      if (!model) {
-        throw new Error("Selected model not found");
+      console.log(`Testing model ${selectedModelId} with prompt: ${testPrompt}`);
+      
+      // Add request timeout of 60 seconds
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      
+      try {
+        // Include full model details in the request even if the model exists
+        // This will serve as a fallback if the server can't find the model
+        const requestBody = { 
+          modelId: selectedModelId, 
+          prompt: testPrompt
+        };
+        
+        // Add model details if available
+        if (selectedModel) {
+          // Fix any typos in the model name for Ollama models
+          let modelName = selectedModel.modelName;
+          if (selectedModel.provider === 'local' && modelName.startsWith('eepseek')) {
+            modelName = modelName.replace('eepseek', 'deepseek');
+            console.log(`Corrected modelName from ${selectedModel.modelName} to ${modelName}`);
+          }
+          
+          Object.assign(requestBody, {
+            provider: selectedModel.provider,
+            modelName: modelName, // Use the corrected model name
+            baseUrl: selectedModel.baseUrl,
+            temperature: selectedModel.temperature,
+            maxTokens: selectedModel.maxTokens
+          });
+        } else if (selectedModelId === '97767c8f-76e2-4b3d-870f-4196dbd59473') {
+          // Hardcoded fallback for your specific model that's having issues
+          // This is based on what you shared in the logs
+          Object.assign(requestBody, {
+            provider: 'local',
+            modelName: 'DeepseekR1 70B local',
+            baseUrl: 'http://localhost:11434/v1',
+            temperature: 0.2,
+            maxTokens: 2000
+          });
+        }
+        
+        const response = await fetch("/api/llm/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+      
+        let responseText = await response.text();
+        console.log("Raw API response:", responseText);
+        
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (jsonError) {
+          console.error("Error parsing response:", jsonError);
+          throw new Error(`API response is not valid JSON: ${responseText}`);
+        }
+        
+        console.log("Parsed API response:", data);
+        
+        if (!response.ok) {
+          const errorMessage = data?.error || `API returned status ${response.status}`;
+          console.error("API error details:", data);
+          throw new Error(errorMessage);
+        }
+        
+        setTestResponse(data.completion);
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out after 60 seconds');
+        }
+        
+        // Rethrow the original error
+        throw fetchError;
+      }
+    } catch (error) {
+      console.error("Error testing model:", error);
+      setTestResponse(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
+      
+      toast({
+        title: "Error testing model",
+        description: error instanceof Error ? error.message : 'Unknown error occurred',
+        variant: "destructive",
+      });
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  // Add function to refresh models
+  const refreshModels = async () => {
+    try {
+      setLoading(true);
+      const modelData = await LLMModelRepository.getAllModels();
+      setModels(modelData || []);
+      toast({
+        title: "Models refreshed",
+        description: `Found ${modelData?.length || 0} models`,
+      });
+    } catch (error) {
+      console.error("Error refreshing models:", error);
+      toast({
+        title: "Refresh failed",
+        description: "Could not refresh models list",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add a new function to handle force initialization
+  const handleForceInitialize = async () => {
+    try {
+      setInitializing(true);
+      
+      // Create a new OpenAI model regardless of existing models
+      const model = await LLMModelRepository.createModel({
+        name: "OpenAI GPT-4o (New)",
+        provider: "openai",
+        modelName: "gpt-4o",
+        apiKey: "",  // User will need to add their API key
+        temperature: 0.2,
+        maxTokens: 2000,
+        costPerThousandTokens: 10,
+        isDefault: true,
+      });
+      
+      console.log("Created new model with ID:", model?.id);
+      
+      toast({
+        title: "Model created",
+        description: `A new OpenAI model has been created${model?.id ? ` with ID: ${model.id}` : ''}. Please add your API key.`,
+      });
+      
+      // Refresh the models list
+      await refreshModels();
+      
+      // Only select the new model if it was successfully created
+      if (model?.id) {
+        setSelectedModelId(model.id);
+      } else {
+        toast({
+          title: "Warning",
+          description: "Model was created but no ID was returned. Model selection may not work correctly.",
+          variant: "destructive",
+        });
       }
       
-      // Call API to test the model
-      const response = await fetch("/api/llm/test", {
+    } catch (error) {
+      console.error("Error creating model:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create model",
+        variant: "destructive",
+      });
+    } finally {
+      setInitializing(false);
+    }
+  };
+
+  // Add debug info function
+  const showDebugInfo = async () => {
+    try {
+      // Get all models
+      const allModels = await LLMModelRepository.getAllModels();
+      console.log("All models:", allModels);
+      
+      // Try to get the model that's failing
+      const modelAttempt = await LLMModelRepository.getModelById(selectedModelId);
+      console.log("Direct model fetch result:", modelAttempt);
+      
+      toast({
+        title: "Debug Info",
+        description: `Models count: ${allModels.length}. Selected model found: ${modelAttempt ? "Yes" : "No"}. See console for details.`,
+      });
+    } catch (error) {
+      console.error("Debug error:", error);
+      toast({
+        title: "Debug Error",
+        description: error instanceof Error ? error.message : "Error running diagnostics",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Add a detailed API diagnostics function
+  const runApiDiagnostics = async () => {
+    try {
+      if (!selectedModelId) {
+        toast({
+          title: "Missing information",
+          description: "Please select a model to debug.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Call our debug API to diagnose database connection issues
+      const response = await fetch("/api/llm/debug", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          modelId: selectedModelId,
-          prompt: testPrompt,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId: selectedModelId })
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error testing model");
+        throw new Error(`API returned status ${response.status}`);
       }
       
       const data = await response.json();
-      setTestResponse(data.completion || "No response received");
-    } catch (error) {
-      console.error("Error testing model:", error);
-      setTestResponse(`Error: ${error instanceof Error ? error.message : "Unknown error occurred"}`);
+      console.log("API Diagnostics Result:", data);
+      
+      // Show structured results in a toast with more details in console
       toast({
-        title: "Test Failed",
-        description: error instanceof Error ? error.message : "Failed to test model",
+        title: "API Diagnostics Completed",
+        description: `Model Found: ${data.modelFound ? "✅" : "❌"}, 
+                      Database: ${data.dbDiagnostics.connectionStatus === 'connected' ? "✅" : "❌"}, 
+                      Model Count: ${data.dbDiagnostics.modelCount}, 
+                      Cache: ${data.cacheStatus}`,
+        duration: 5000,
+      });
+      
+      // Provide more detailed feedback based on the diagnostic results
+      if (!data.modelFound) {
+        if (data.dbDiagnostics.modelCount > 0) {
+          toast({
+            title: "Issue Identified",
+            description: "The database is connected and has models, but the requested model ID was not found.",
+            variant: "destructive",
+            duration: 5000,
+          });
+        } else {
+          toast({
+            title: "No Models Found",
+            description: "The database is connected but no models are available. Try initializing the default model.",
+            variant: "destructive",
+            duration: 5000,
+          });
+        }
+      }
+      
+      // If database connection failed, provide specific guidance
+      if (data.dbDiagnostics.connectionStatus !== 'connected') {
+        toast({
+          title: "Database Connection Issue",
+          description: "Unable to connect to the database. Check environment variables and network connectivity.",
+          variant: "destructive",
+          duration: 5000,
+        });
+      }
+    } catch (error) {
+      console.error("Error running API diagnostics:", error);
+      toast({
+        title: "Diagnostics Error",
+        description: error instanceof Error ? error.message : "Error running API diagnostics",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const debugModelDetails = async () => {
+    if (!selectedModelId) {
+      toast({
+        title: "Missing information",
+        description: "Please select a model to debug.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      setTestLoading(true);
+      // Get all models
+      const allModels = await LLMModelRepository.getAllModels();
+      console.log("All models:", allModels);
+      
+      // Try to get the model that's failing
+      const modelAttempt = await LLMModelRepository.getModelById(selectedModelId);
+      console.log("Direct model fetch result:", modelAttempt);
+      
+      // Call the debug endpoint using POST method
+      const response = await fetch(`/api/llm/debug`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ modelId: selectedModelId })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API returned status ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("Debug API response:", data);
+      
+      setTestResponse(JSON.stringify(data, null, 2));
+      
+      toast({
+        title: "Debug information retrieved",
+        description: "Check the console and response area for details.",
+      });
+    } catch (error) {
+      console.error("Error debugging model:", error);
+      setTestResponse(String(error));
+      toast({
+        title: "Error debugging model",
+        description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       });
     } finally {
@@ -532,9 +861,10 @@ export default function LLMManagementPage() {
                                     <SelectItem value="anthropic">Anthropic</SelectItem>
                                     <SelectItem value="azure">Azure OpenAI</SelectItem>
                                     <SelectItem value="groq">Groq</SelectItem>
-                                    <SelectItem value="cohere">Cohere</SelectItem>
                                     <SelectItem value="together">Together AI</SelectItem>
+                                    <SelectItem value="cohere">Cohere</SelectItem>
                                     <SelectItem value="custom">Custom</SelectItem>
+                                    <SelectItem value="local">Local Model</SelectItem>
                                   </SelectContent>
                                 </Select>
                                 <FormMessage />
@@ -549,8 +879,22 @@ export default function LLMManagementPage() {
                               <FormItem>
                                 <FormLabel>Model Name</FormLabel>
                                 <FormControl>
-                                  <Input placeholder="e.g. gpt-4" {...field} />
+                                  <Input placeholder={
+                                    form.watch('provider') === 'together' ? "e.g. meta-llama/Llama-3-70b-instruct" : 
+                                    form.watch('provider') === 'local' ? "e.g. deepseek-r1 (any identifier)" :
+                                    "e.g. gpt-4"
+                                  } {...field} />
                                 </FormControl>
+                                {form.watch('provider') === 'together' && (
+                                  <FormDescription>
+                                    For Together.ai, use the full model path (e.g. meta-llama/Llama-3-70b-instruct)
+                                  </FormDescription>
+                                )}
+                                {form.watch('provider') === 'local' && (
+                                  <FormDescription>
+                                    Enter a name to identify your local model (e.g. deepseek-r1)
+                                  </FormDescription>
+                                )}
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -561,7 +905,7 @@ export default function LLMManagementPage() {
                           <FormField
                             control={form.control}
                             name="temperature"
-                            render={({ field }) => (
+                            render={({ field: { onChange, value, ...rest } }) => (
                               <FormItem>
                                 <FormLabel>Temperature</FormLabel>
                                 <FormControl>
@@ -570,8 +914,12 @@ export default function LLMManagementPage() {
                                     min="0" 
                                     max="1" 
                                     step="0.1" 
-                                    {...field}
-                                    onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                                    {...rest}
+                                    value={isNaN(parseFloat(String(value))) ? "0.2" : value}
+                                    onChange={(e) => {
+                                      const parsed = e.target.value === "" ? 0.2 : parseFloat(e.target.value);
+                                      onChange(parsed as number);
+                                    }}
                                   />
                                 </FormControl>
                                 <FormDescription>
@@ -585,15 +933,19 @@ export default function LLMManagementPage() {
                           <FormField
                             control={form.control}
                             name="maxTokens"
-                            render={({ field }) => (
+                            render={({ field: { onChange, value, ...rest } }) => (
                               <FormItem>
                                 <FormLabel>Max Tokens</FormLabel>
                                 <FormControl>
                                   <Input 
                                     type="number" 
                                     min="1" 
-                                    {...field}
-                                    onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                    {...rest}
+                                    value={isNaN(parseFloat(String(value))) ? "2000" : value}
+                                    onChange={(e) => {
+                                      const parsed = e.target.value === "" ? 2000 : parseInt(e.target.value);
+                                      onChange(parsed as number);
+                                    }}
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -615,9 +967,21 @@ export default function LLMManagementPage() {
                                   {...field} 
                                 />
                               </FormControl>
-                              <FormDescription>
-                                Leave blank to use the key from environment variables
-                              </FormDescription>
+                              {form.watch('provider') === 'together' && (
+                                <FormDescription>
+                                  Enter your Together.ai API key from https://api.together.xyz/settings/api-keys
+                                </FormDescription>
+                              )}
+                              {form.watch('provider') === 'local' && (
+                                <FormDescription>
+                                  For local models, enter "EMPTY" or leave blank if your server doesn't require an API key
+                                </FormDescription>
+                              )}
+                              {form.watch('provider') !== 'together' && form.watch('provider') !== 'local' && (
+                                <FormDescription>
+                                  Leave blank to use the key from environment variables
+                                </FormDescription>
+                              )}
                               <FormMessage />
                             </FormItem>
                           )}
@@ -628,16 +992,32 @@ export default function LLMManagementPage() {
                           name="baseUrl"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Base URL (Optional)</FormLabel>
+                              <FormLabel>Base URL</FormLabel>
                               <FormControl>
                                 <Input 
-                                  placeholder="https://api.example.com/v1" 
+                                  placeholder={
+                                    form.watch('provider') === 'together' ? "https://api.together.xyz" : 
+                                    form.watch('provider') === 'local' ? "http://localhost:11434/v1" :
+                                    "Enter API base URL (if needed)"
+                                  } 
                                   {...field} 
                                 />
                               </FormControl>
-                              <FormDescription>
-                                Custom endpoint URL, if different from the provider default
-                              </FormDescription>
+                              {form.watch('provider') === 'together' && (
+                                <FormDescription>
+                                  For Together.ai, usually https://api.together.xyz
+                                </FormDescription>
+                              )}
+                              {form.watch('provider') === 'local' && (
+                                <FormDescription>
+                                  For Ollama, use http://localhost:11434/v1. For other local servers, check their documentation.
+                                </FormDescription>
+                              )}
+                              {form.watch('provider') !== 'together' && form.watch('provider') !== 'local' && (
+                                <FormDescription>
+                                  Optional: only needed for custom endpoint URLs
+                                </FormDescription>
+                              )}
                               <FormMessage />
                             </FormItem>
                           )}
@@ -646,21 +1026,24 @@ export default function LLMManagementPage() {
                         <FormField
                           control={form.control}
                           name="costPerThousandTokens"
-                          render={({ field }) => (
+                          render={({ field: { onChange, value, ...rest } }) => (
                             <FormItem>
-                              <FormLabel>Cost per 1K Tokens ($)</FormLabel>
+                              <FormLabel>Cost per 1K Tokens</FormLabel>
                               <FormControl>
                                 <Input 
                                   type="number" 
                                   min="0" 
                                   step="0.01" 
-                                  placeholder="10.00" 
-                                  {...field}
-                                  onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                                  {...rest}
+                                  value={isNaN(parseFloat(String(value))) ? "10" : value}
+                                  onChange={(e) => {
+                                    const parsed = e.target.value === "" ? 10 : parseFloat(e.target.value);
+                                    onChange(parsed as number);
+                                  }}
                                 />
                               </FormControl>
                               <FormDescription>
-                                Used for cost estimation and tracking
+                                Estimated cost in USD per 1,000 tokens
                               </FormDescription>
                               <FormMessage />
                             </FormItem>
@@ -946,9 +1329,49 @@ export default function LLMManagementPage() {
         <TabsContent value="test">
           <Card>
             <CardHeader>
-              <CardTitle>Test LLM Models</CardTitle>
+              <div className="flex justify-between items-center">
+                <CardTitle>Test Models</CardTitle>
+                <div className="flex space-x-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={refreshModels}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Refreshing...
+                      </>
+                    ) : "Refresh Models"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={handleForceInitialize}
+                    disabled={initializing}
+                  >
+                    {initializing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : "Create New Model"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={showDebugInfo}
+                  >
+                    Debug Info
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={runApiDiagnostics}
+                  >
+                    API Diagnostics
+                  </Button>
+                </div>
+              </div>
               <CardDescription>
-                Try out your configured models with a test prompt
+                Test your LLM models with sample prompts
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1002,19 +1425,28 @@ export default function LLMManagementPage() {
                       ></textarea>
                     </div>
                     
-                    <Button 
-                      onClick={handleTestPrompt} 
-                      disabled={testLoading || !selectedModelId || !testPrompt.trim()}
-                    >
-                      {testLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Testing...
-                        </>
-                      ) : (
-                        "Send Test Prompt"
-                      )}
-                    </Button>
+                    <div className="mt-4 flex justify-end space-x-2">
+                      <Button
+                        variant="outline"
+                        onClick={debugModelDetails}
+                        disabled={testLoading || !selectedModelId}
+                      >
+                        Debug Model
+                      </Button>
+                      <Button
+                        onClick={handleTestPrompt}
+                        disabled={testLoading || !selectedModelId || !testPrompt}
+                      >
+                        {testLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Testing...
+                          </>
+                        ) : (
+                          "Test"
+                        )}
+                      </Button>
+                    </div>
                   </div>
                   
                   <div className="border rounded-md p-4 bg-muted/50 min-h-[200px] max-h-[400px] overflow-auto">

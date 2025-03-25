@@ -1,3 +1,6 @@
+'use server';
+
+// This module uses Node.js libraries and should ONLY be used in server components or server actions
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 

@@ -4,7 +4,7 @@ import { z } from "zod";
 export const LLMModelSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1),
-  provider: z.enum(["openai", "anthropic", "azure", "groq", "cohere", "together", "custom"]),
+  provider: z.enum(["openai", "anthropic", "azure", "groq", "cohere", "together", "custom", "local"]),
   modelName: z.string().min(1),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),

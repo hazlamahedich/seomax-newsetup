@@ -4,7 +4,47 @@ import { LLMModel, LLMUsage, UsageStatsResponse } from './usage';
 // Initialize Supabase client
 const supabase = createSupabaseClient();
 
+// Add a model cache to reduce database queries
+const modelCache = new Map<string, { model: LLMModel, timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export const LLMModelRepository = {
+  // Debug-only method to check if a model is in the cache
+  _debugOnlyCheckCache(id: string): boolean {
+    const cached = modelCache.get(id);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      return true;
+    }
+    return false;
+  },
+
+  // Add a model to the cache directly (useful for bypassing database issues)
+  cacheModel(model: LLMModel): void {
+    if (!model.id) {
+      console.error("Repository: Cannot cache model without ID");
+      return;
+    }
+    
+    // Make sure the model has all required fields before caching
+    if (!model.name || !model.provider || !model.modelName) {
+      console.error("Repository: Cannot cache incomplete model:", model);
+      return;
+    }
+    
+    // Fix any typos in the model name for Ollama models
+    let fixedModel = { ...model };
+    if (model.provider === 'local' && model.modelName.startsWith('eepseek')) {
+      fixedModel.modelName = model.modelName.replace('eepseek', 'deepseek');
+      console.log(`Repository: Corrected modelName from ${model.modelName} to ${fixedModel.modelName}`);
+    }
+    
+    // Create a deep copy of the model to ensure it doesn't get affected by later changes
+    const modelCopy = JSON.parse(JSON.stringify(fixedModel));
+    
+    console.log("Repository: Manually caching model:", modelCopy.name, "with id:", modelCopy.id);
+    modelCache.set(modelCopy.id, { model: modelCopy, timestamp: Date.now() });
+  },
+
   // Create a new LLM model configuration
   async createModel(model: Omit<LLMModel, 'id' | 'createdAt' | 'updatedAt'>): Promise<LLMModel | null> {
     // If this model is set as default, unset any existing default models
@@ -37,7 +77,7 @@ export const LLMModelRepository = {
       return null;
     }
 
-    return {
+    const newModel = {
       id: data.id,
       name: data.name,
       provider: data.provider,
@@ -52,6 +92,11 @@ export const LLMModelRepository = {
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
     };
+    
+    // Update cache
+    modelCache.set(newModel.id, { model: newModel, timestamp: Date.now() });
+    
+    return newModel;
   },
 
   // Get all LLM model configurations
@@ -66,7 +111,7 @@ export const LLMModelRepository = {
       return [];
     }
 
-    return data.map(record => ({
+    const models = data.map(record => ({
       id: record.id,
       name: record.name,
       provider: record.provider,
@@ -81,66 +126,305 @@ export const LLMModelRepository = {
       createdAt: new Date(record.created_at),
       updatedAt: new Date(record.updated_at),
     }));
+    
+    // Update cache for all models
+    models.forEach(model => {
+      modelCache.set(model.id, { model, timestamp: Date.now() });
+    });
+    
+    return models;
   },
 
   // Get a specific LLM model by ID
   async getModelById(id: string): Promise<LLMModel | null> {
-    const { data, error } = await supabase
-      .from('llm_models')
-      .select('*')
-      .eq('id', id)
-      .single();
+    try {
+      console.log("Repository: Fetching model by ID:", id);
+      
+      if (!id) {
+        console.error("Repository: Invalid model ID (empty)");
+        return null;
+      }
+      
+      // Check cache first
+      const cached = modelCache.get(id);
+      if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+        console.log("Repository: Using cached model:", cached.model.name);
+        return cached.model;
+      }
+      
+      // First attempt: Normal query with .limit(1) instead of .single()
+      try {
+        const { data, error } = await supabase
+          .from('llm_models')
+          .select('*')
+          .eq('id', id)
+          .limit(1);
 
-    if (error || !data) {
-      console.error('Error fetching LLM model by ID:', error);
+        if (error) {
+          console.error('Repository: Error with first query attempt:', error);
+        } else if (data && data.length > 0) {
+          const model = data[0];
+          console.log("Repository: Successfully found model with first approach:", model.name);
+          
+          const modelObj = {
+            id: model.id,
+            name: model.name,
+            provider: model.provider,
+            modelName: model.model_name,
+            apiKey: model.api_key,
+            baseUrl: model.base_url,
+            temperature: model.temperature,
+            maxTokens: model.max_tokens,
+            costPerToken: model.cost_per_token,
+            costPerThousandTokens: model.cost_per_thousand_tokens,
+            isDefault: model.is_default,
+            createdAt: new Date(model.created_at),
+            updatedAt: new Date(model.updated_at),
+          };
+          
+          // Update cache
+          modelCache.set(id, { model: modelObj, timestamp: Date.now() });
+          
+          return modelObj;
+        }
+      } catch (firstAttemptError) {
+        console.error('Repository: First attempt exception:', firstAttemptError);
+      }
+      
+      // Second attempt: Get all models and filter client-side
+      try {
+        console.log("Repository: Trying second approach (getting all models)");
+        const { data, error } = await supabase
+          .from('llm_models')
+          .select('*');
+          
+        if (error) {
+          console.error('Repository: Error with second query attempt:', error);
+        } else if (data && data.length > 0) {
+          // Find model with matching ID
+          const model = data.find(m => m.id === id);
+          
+          if (model) {
+            console.log("Repository: Found model with second approach:", model.name);
+            
+            const modelObj = {
+              id: model.id,
+              name: model.name,
+              provider: model.provider,
+              modelName: model.model_name,
+              apiKey: model.api_key,
+              baseUrl: model.base_url,
+              temperature: model.temperature,
+              maxTokens: model.max_tokens,
+              costPerToken: model.cost_per_token,
+              costPerThousandTokens: model.cost_per_thousand_tokens,
+              isDefault: model.is_default,
+              createdAt: new Date(model.created_at),
+              updatedAt: new Date(model.updated_at),
+            };
+            
+            // Update cache for all models
+            data.forEach(m => {
+              const mObj = {
+                id: m.id,
+                name: m.name,
+                provider: m.provider,
+                modelName: m.model_name,
+                apiKey: m.api_key,
+                baseUrl: m.base_url,
+                temperature: m.temperature,
+                maxTokens: m.max_tokens,
+                costPerToken: m.cost_per_token,
+                costPerThousandTokens: m.cost_per_thousand_tokens,
+                isDefault: m.is_default,
+                createdAt: new Date(m.created_at),
+                updatedAt: new Date(m.updated_at),
+              };
+              modelCache.set(m.id, { model: mObj, timestamp: Date.now() });
+            });
+            
+            return modelObj;
+          } else {
+            console.log("Repository: Model not found in list of all models. Available IDs:", data.map(m => m.id));
+          }
+        }
+      } catch (secondAttemptError) {
+        console.error('Repository: Second attempt exception:', secondAttemptError);
+      }
+      
+      // Third attempt: Try using a new Supabase client
+      try {
+        console.log("Repository: Trying third approach (new client)");
+        const freshClient = createSupabaseClient();
+        
+        const { data, error } = await freshClient
+          .from('llm_models')
+          .select('*')
+          .eq('id', id)
+          .limit(1);
+          
+        if (error) {
+          console.error('Repository: Error with third query attempt:', error);
+        } else if (data && data.length > 0) {
+          const model = data[0];
+          console.log("Repository: Found model with third approach:", model.name);
+          
+          const modelObj = {
+            id: model.id,
+            name: model.name,
+            provider: model.provider,
+            modelName: model.model_name,
+            apiKey: model.api_key,
+            baseUrl: model.base_url,
+            temperature: model.temperature,
+            maxTokens: model.max_tokens,
+            costPerToken: model.cost_per_token,
+            costPerThousandTokens: model.cost_per_thousand_tokens,
+            isDefault: model.is_default,
+            createdAt: new Date(model.created_at),
+            updatedAt: new Date(model.updated_at),
+          };
+          
+          // Update cache
+          modelCache.set(id, { model: modelObj, timestamp: Date.now() });
+          
+          return modelObj;
+        }
+      } catch (thirdAttemptError) {
+        console.error('Repository: Third attempt exception:', thirdAttemptError);
+      }
+      
+      // Fourth attempt: Try using direct SQL
+      try {
+        console.log("Repository: Trying fourth approach (direct SQL)");
+        const freshClient = createSupabaseClient();
+        
+        const { data, error } = await freshClient.rpc('fetch_model_by_id', { model_id: id });
+        
+        if (error) {
+          console.error('Repository: Error with fourth query attempt (RPC):', error);
+        } else if (data) {
+          console.log("Repository: Found model with fourth approach:", data.name);
+          
+          const modelObj = {
+            id: data.id,
+            name: data.name,
+            provider: data.provider,
+            modelName: data.model_name,
+            apiKey: data.api_key,
+            baseUrl: data.base_url,
+            temperature: data.temperature,
+            maxTokens: data.max_tokens,
+            costPerToken: data.cost_per_token,
+            costPerThousandTokens: data.cost_per_thousand_tokens,
+            isDefault: data.is_default,
+            createdAt: new Date(data.created_at),
+            updatedAt: new Date(data.updated_at),
+          };
+          
+          // Update cache
+          modelCache.set(id, { model: modelObj, timestamp: Date.now() });
+          
+          return modelObj;
+        }
+      } catch (fourthAttemptError) {
+        console.error('Repository: Fourth attempt exception:', fourthAttemptError);
+      }
+      
+      // If we get here, all attempts failed
+      console.error('Repository: All attempts to fetch model failed for ID:', id);
+      return null;
+    } catch (err) {
+      console.error('Repository: Unexpected error when fetching model by ID:', err);
       return null;
     }
-
-    return {
-      id: data.id,
-      name: data.name,
-      provider: data.provider,
-      modelName: data.model_name,
-      apiKey: data.api_key,
-      baseUrl: data.base_url,
-      temperature: data.temperature,
-      maxTokens: data.max_tokens,
-      costPerToken: data.cost_per_token,
-      costPerThousandTokens: data.cost_per_thousand_tokens,
-      isDefault: data.is_default,
-      createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at),
-    };
   },
 
   // Get the default LLM model
   async getDefaultModel(): Promise<LLMModel | null> {
-    const { data, error } = await supabase
-      .from('llm_models')
-      .select('*')
-      .eq('is_default', true)
-      .single();
-
-    if (error || !data) {
-      console.error('Error fetching default LLM model:', error);
+    try {
+      // First check cache for any default model
+      for (const [_, cacheEntry] of modelCache.entries()) {
+        if ((Date.now() - cacheEntry.timestamp) < CACHE_TTL && cacheEntry.model.isDefault) {
+          console.log("Repository: Using cached default model:", cacheEntry.model.name);
+          return cacheEntry.model;
+        }
+      }
+      
+      // Query the database if no cached default model found
+      const { data, error } = await supabase
+        .from('llm_models')
+        .select('*')
+        .eq('is_default', true)
+        .single();
+  
+      if (error || !data) {
+        console.error('Error fetching default LLM model:', error);
+        
+        // Try a fallback approach using limit(1) instead of single()
+        try {
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('llm_models')
+            .select('*')
+            .eq('is_default', true)
+            .limit(1);
+            
+          if (fallbackError || !fallbackData || fallbackData.length === 0) {
+            console.error('Fallback query for default model also failed:', fallbackError);
+            return null;
+          }
+          
+          const model = fallbackData[0];
+          const modelObj = {
+            id: model.id,
+            name: model.name,
+            provider: model.provider,
+            modelName: model.model_name,
+            apiKey: model.api_key,
+            baseUrl: model.base_url,
+            temperature: model.temperature,
+            maxTokens: model.max_tokens,
+            costPerToken: model.cost_per_token,
+            costPerThousandTokens: model.cost_per_thousand_tokens,
+            isDefault: model.is_default,
+            createdAt: new Date(model.created_at),
+            updatedAt: new Date(model.updated_at),
+          };
+          
+          // Update cache
+          modelCache.set(model.id, { model: modelObj, timestamp: Date.now() });
+          
+          return modelObj;
+        } catch (fallbackQueryError) {
+          console.error('Exception during fallback query for default model:', fallbackQueryError);
+          return null;
+        }
+      }
+  
+      const modelObj = {
+        id: data.id,
+        name: data.name,
+        provider: data.provider,
+        modelName: data.model_name,
+        apiKey: data.api_key,
+        baseUrl: data.base_url,
+        temperature: data.temperature,
+        maxTokens: data.max_tokens,
+        costPerToken: data.cost_per_token,
+        costPerThousandTokens: data.cost_per_thousand_tokens,
+        isDefault: data.is_default,
+        createdAt: new Date(data.created_at),
+        updatedAt: new Date(data.updated_at),
+      };
+      
+      // Update cache
+      modelCache.set(data.id, { model: modelObj, timestamp: Date.now() });
+      
+      return modelObj;
+    } catch (err) {
+      console.error('Unexpected error fetching default model:', err);
       return null;
     }
-
-    return {
-      id: data.id,
-      name: data.name,
-      provider: data.provider,
-      modelName: data.model_name,
-      apiKey: data.api_key,
-      baseUrl: data.base_url,
-      temperature: data.temperature,
-      maxTokens: data.max_tokens,
-      costPerToken: data.cost_per_token,
-      costPerThousandTokens: data.cost_per_thousand_tokens,
-      isDefault: data.is_default,
-      createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at),
-    };
   },
 
   // Update an existing LLM model
@@ -180,7 +464,7 @@ export const LLMModelRepository = {
       return null;
     }
 
-    return {
+    const updatedModel = {
       id: data.id,
       name: data.name,
       provider: data.provider,
@@ -195,6 +479,11 @@ export const LLMModelRepository = {
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
     };
+    
+    // Update cache
+    modelCache.set(id, { model: updatedModel, timestamp: Date.now() });
+    
+    return updatedModel;
   },
 
   // Delete an LLM model
@@ -208,6 +497,9 @@ export const LLMModelRepository = {
       console.error('Error deleting LLM model:', error);
       return false;
     }
+    
+    // Remove from cache
+    modelCache.delete(id);
 
     return true;
   },

@@ -4,7 +4,7 @@ import { z } from "zod";
 
 // Define model configuration schema
 export const LLMConfigSchema = z.object({
-  provider: z.enum(["openai", "anthropic", "azure", "groq", "cohere", "together", "custom"]),
+  provider: z.enum(["openai", "anthropic", "azure", "groq", "cohere", "together", "custom", "local"]),
   modelName: z.string(),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
@@ -139,26 +139,53 @@ export class LiteLLMProvider {
     try {
       // Set environment variable for the provider
       if (config.apiKey) {
-        process.env[`${config.provider.toUpperCase()}_API_KEY`] = config.apiKey;
+        if (config.provider === "together") {
+          process.env.TOGETHER_API_KEY = config.apiKey;
+        } else if (config.provider === "local") {
+          // For local models with OpenAI-compatible API, use OPENAI_API_KEY
+          process.env.OPENAI_API_KEY = config.apiKey === "EMPTY" ? "" : config.apiKey;
+        } else {
+          process.env[`${config.provider.toUpperCase()}_API_KEY`] = config.apiKey;
+        }
       }
 
       // Construct the model string based on provider
       let modelString = config.modelName;
-      if (config.provider !== "openai") {
+      if (config.provider === "local") {
+        // For local models, use the model name as is
+        modelString = config.modelName;
+      } else if (config.provider === "together") {
+        modelString = `together/${config.modelName}`;
+      } else if (config.provider !== "openai") {
         modelString = `${config.provider}/${config.modelName}`;
       }
 
       // Set base URL if provided
       if (config.baseUrl) {
-        process.env.OPENAI_API_BASE = config.baseUrl;
+        if (config.provider === "together") {
+          process.env.TOGETHER_API_BASE = config.baseUrl;
+        } else if (config.provider === "local") {
+          // For local models, we use the OpenAI API base
+          process.env.OPENAI_API_BASE = config.baseUrl;
+        } else {
+          process.env.OPENAI_API_BASE = config.baseUrl;
+        }
       }
-
-      const response = await completion({
+      
+      // For local models, we need to ensure a proper options structure
+      const completionOptions: any = {
         model: modelString,
         messages: [{ role: "user", content: prompt }],
         temperature: config.temperature,
         max_tokens: config.maxTokens,
-      });
+      };
+      
+      // For local models, ensure we're using the correct API base
+      if (config.provider === "local") {
+        completionOptions.api_base = config.baseUrl;
+      }
+
+      const response = await completion(completionOptions);
 
       // Record usage
       if (response && response.usage) {
@@ -201,6 +228,7 @@ export class LiteLLMProvider {
       "cohere": 0.015,
       "together": 0.007,
       "custom": 0.01,
+      "local": 0.0, // Local models don't have API costs
     };
     
     return (tokens / 1000) * (defaultRates[config.provider] || 0.01);

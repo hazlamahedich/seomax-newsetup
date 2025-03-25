@@ -24,33 +24,39 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        const parsedCredentials = z
-          .object({ email: z.string().email(), password: z.string().min(6) })
-          .safeParse(credentials);
+        try {
+          const parsedCredentials = z
+            .object({ email: z.string().email(), password: z.string().min(6) })
+            .safeParse(credentials);
+            
+          if (!parsedCredentials.success) {
+            return null;
+          }
           
-        if (!parsedCredentials.success) {
+          const { email, password } = parsedCredentials.data;
+          
+          // Use the auth service to sign in with Supabase
+          const result = await signIn(email, password);
+          
+          if (!result.success || !result.data) {
+            return null;
+          }
+          
+          return {
+            id: result.data.userId,
+            email: result.data.email,
+            name: result.data.name || null,
+          };
+        } catch (error) {
+          console.error("Error in authorize callback:", error);
           return null;
         }
-        
-        const { email, password } = parsedCredentials.data;
-        
-        // Use the auth service to sign in with Supabase
-        const result = await signIn(email, password);
-        
-        if (!result.success || !result.data) {
-          return null;
-        }
-        
-        return {
-          id: result.data.userId,
-          email: result.data.email,
-          name: result.data.name || null,
-        };
       }
     }),
   ],
   session: {
     strategy: "jwt",
+    maxAge: 24 * 60 * 60, // 24 hours
   },
   pages: {
     signIn: '/login',
@@ -59,22 +65,38 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async session({ session, token }) {
-      if (session.user && token.sub) {
-        session.user.id = token.sub;
+      try {
+        if (session.user && token.sub) {
+          session.user.id = token.sub;
+        }
+        return session;
+      } catch (error) {
+        console.error("Error in session callback:", error);
+        return session;
       }
-      return session;
     },
     async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
+      try {
+        if (user) {
+          token.id = user.id;
+        }
+        return token;
+      } catch (error) {
+        console.error("Error in JWT callback:", error);
+        return token;
       }
-      return token;
     }
   },
   // Explicitly provide required values to prevent NextAuth from using dynamic APIs
   secret: process.env.NEXTAUTH_SECRET,
+  // Add debug mode in development
+  debug: process.env.NODE_ENV === 'development',
 };
 
-// Use standard export instead of dynamic exports
+// Use standard export instead of custom handler
 const handler = NextAuth(authOptions);
+
+// Add some diagnostic logging to help identify auth issues
+console.log("[NextAuth] Auth API handler initialized, API route configured");
+
 export { handler as GET, handler as POST } 

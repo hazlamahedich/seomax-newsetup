@@ -112,6 +112,11 @@ export function SidebarNav({ className, ...props }: SidebarNavProps) {
       icon: <Users className="mr-2 h-4 w-4" />,
     },
     {
+      title: "LLM Settings",
+      href: "/dashboard/admin/llm",
+      icon: <MessageSquare className="mr-2 h-4 w-4" />,
+    },
+    {
       title: "AI Playground",
       href: "/dashboard/admin/ai-playground",
       icon: <Lightbulb className="mr-2 h-4 w-4" />,
