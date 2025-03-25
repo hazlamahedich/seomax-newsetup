@@ -15777,3 +15777,170 @@ This architecture allows for progressive enhancement of the SEO Audit feature wh
   4. Calculate individual and combined technical scores
   5. Generate recommendations based on detected issues
   6. Display results in tabbed interface with historical comparison 
+### Service Enhancement Pattern
+
+We've implemented a consistent pattern for enhancing existing services with LLM capabilities:
+
+1. **Graceful Enhancement**: Existing methods are enhanced with LLM capabilities while maintaining original functionality as fallback
+2. **Progressive Implementation**: Methods accept the same inputs and return the same outputs to maintain API compatibility
+3. **Error Resilience**: Robust error handling ensures service continuity even when LLM services fail
+
+Example implementation pattern:
+
+```typescript
+export class EnhancedService {
+  // Enhanced method with LLM capabilities
+  static async enhancedMethod(input: InputType): Promise<OutputType> {
+    try {
+      // Try using LLM for enhanced capabilities
+      const llmProvider = LiteLLMProvider.getInstance();
+      const prompt = this.constructPrompt(input);
+      const response = await llmProvider.callLLM(prompt, undefined, { projectId: input.projectId });
+      
+      if (response?.choices?.[0]?.message?.content) {
+        try {
+          const result = JSON.parse(response.choices[0].message.content);
+          if (this.validateResult(result)) {
+            return result;
+          }
+        } catch (parseError) {
+          console.error('Error parsing LLM response:', parseError);
+        }
+      }
+    } catch (error) {
+      console.error('LLM enhancement failed, falling back to rule-based approach:', error);
+    }
+    
+    // Fallback to original rule-based implementation
+    return this.originalImplementation(input);
+  }
+  
+  // Original rule-based implementation as fallback
+  private static originalImplementation(input: InputType): OutputType {
+    // Original rule-based implementation
+  }
+}
+```
+
+### Prompt Engineering Pattern
+
+We follow a structured approach to creating effective prompts:
+
+1. **Context Provision**: Give the LLM necessary context without overwhelming with tokens
+2. **Clear Instructions**: Specific task requirements and constraints 
+3. **Output Format Specification**: Define exact format expected (usually JSON)
+4. **Examples**: Include examples when helpful for complex tasks
+5. **Truncation Control**: Limit input content to manage token usage
+
+Example prompt template pattern:
+
+```typescript
+private static constructPrompt(inputData: any): string {
+  return `
+    Task: [Clear description of what the LLM needs to do]
+    
+    Context:
+    ${this.formatRelevantContext(inputData)}
+    
+    Instructions:
+    1. Analyze the provided information
+    2. [Specific step-by-step instructions]
+    3. Consider these factors: [critical considerations]
+    
+    Output format:
+    Return a JSON object with the following structure:
+    {
+      "property1": "value1",
+      "property2": "value2",
+      "scores": {
+        "aspect1": number,
+        "aspect2": number
+      }
+    }
+    
+    Only return the JSON object, no other text.
+  `;
+}
+```
+
+### Confidence Scoring Pattern
+
+For LLM-generated information that requires quality assessment:
+
+1. **Explicit Confidence Request**: Ask LLM to provide confidence scores
+2. **Multi-attribute Scoring**: Rate confidence for different aspects independently
+3. **Threshold Enforcement**: Only use LLM output that meets minimum confidence
+4. **Quality Metrics**: Track confidence scores for monitoring and improvement
+
+Example implementation in LocalSEOService:
+
+```typescript
+// From LocalSEOService.extractNAPInfo
+if (result && result.confidence.name > 70 && 
+   (result.confidence.address > 70 || result.confidence.phone > 70)) {
+  return {
+    name: result.name,
+    address: {
+      // Address properties
+    },
+    phone: result.phone || ''
+  };
+}
+```
+
+### Error Handling and Fallback Pattern
+
+Multi-layered error handling to ensure service reliability:
+
+1. **Parse Error Handling**: Try/catch blocks around JSON parsing
+2. **LLM Error Handling**: Catches and logs LLM API errors
+3. **Validation Layer**: Verifies structure and content of parsed responses
+4. **Hierarchical Fallbacks**: Falls back to simpler LLM prompts or rule-based approaches
+5. **Graceful Degradation**: Returns best-effort results rather than failing completely
+
+Example from TechnicalSEOService:
+
+```typescript
+try {
+  // Try LLM-based recommendations
+  const response = await llmProvider.callLLM(prompt);
+  
+  if (response?.choices?.[0]?.message?.content) {
+    try {
+      const results = JSON.parse(response.choices[0].message.content);
+      
+      // Validate schema
+      if (this.validateRecommendationsSchema(results)) {
+        return results;
+      }
+    } catch (parseError) {
+      console.error('Error parsing LLM recommendations:', parseError);
+    }
+  }
+} catch (llmError) {
+  console.error('LLM recommendation generation failed:', llmError);
+}
+
+// Fall back to rule-based recommendations
+return this.generateRuleBasedRecommendations(issuesByType);
+```
+
+### Implementation Examples
+
+1. **LocalSEOService.extractNAPInfo**
+   - Intelligent extraction of business NAP information from HTML
+   - Focuses on relevant HTML sections (header, footer, contact sections)
+   - Returns structured data with confidence scores
+   - Falls back to schema markup or simple DOM traversal
+
+2. **CompetitorAnalysisService._identifyContentGaps**
+   - Semantic analysis of user's content vs. competitor content
+   - Identifies missing topics, less comprehensive coverage, and unique angles
+   - Generates actionable implementation suggestions
+   - Falls back to simpler rule-based content gap identification
+
+3. **TechnicalSEOService.generateRecommendations**
+   - Analyzes technical issues by type and severity
+   - Provides prioritized, detailed recommendations
+   - Includes implementation difficulty and steps
+   - Falls back to predefined recommendations by issue type

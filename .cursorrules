@@ -19,6 +19,13 @@
 - Local SEO analysis follows a specific flow: NAP extraction → schema validation → Google Business Profile detection → local keyword analysis → map embed verification → scoring
 - Competitive analysis follows a structured approach: URL scraping → content extraction → metrics calculation → storage → comparison analysis → gap identification → strategy generation → tabbed results display
 
+## New AI Feature Implementation Paths
+- AI Content Rewriter follows: original content → keyword analysis → E-E-A-T preservation → rewritten content → metrics calculation → UI display
+- SEO ROI Forecasting follows: historical data collection → recommendation scoring → projection calculation → implementation plan creation → visualization
+- SERP Volatility Prediction follows: keyword data analysis → historical ranking examination → pattern identification → volatility prediction → action plan generation
+- Schema Markup Generator follows: page analysis → schema type detection → template selection → markup generation → validation → implementation options
+- Competitor Strategy Decoder follows: competitor data collection → content analysis → technical factor examination → strategy identification → counter-tactic generation
+
 ## User Preferences
 - Clear, actionable suggestions for content optimization
 - Visual representation of SEO metrics with trends over time
@@ -39,6 +46,29 @@
 - Test fixtures provide reusable test data and helper functions
 - Technical SEO service uses static methods for all analysis operations
 - Local SEO service follows service class pattern with static methods for each analysis component
+
+## AI Service Patterns
+- AI services are implemented as TypeScript classes with static methods
+- Each service includes interfaces for parameters and results
+- LLM interaction uses a centralized provider (liteLLMProvider)
+- Services handle their own database interactions with Supabase
+- Error handling includes graceful fallbacks and user notifications
+- AI services follow the pattern: data collection → prompt construction → LLM processing → result parsing → storage → presentation
+
+## API Patterns
+- API routes follow a consistent structure with action-based request handling
+- Each route supports multiple actions (create, get, update, delete)
+- Authentication is verified at the start of each request
+- Parameter validation ensures proper inputs
+- Error responses follow a standardized format
+
+## UI Component Patterns
+- Tab-based interfaces for complex features
+- Form components with validation for user inputs
+- Card-based layout for structured data presentation
+- Progress indicators for asynchronous operations
+- Appropriate loading, error, and empty states
+- Visualization components for metrics and results
 
 ## PDF Generation Patterns
 - PDFGenerationService implements static methods for modular PDF creation
@@ -69,33 +99,34 @@
 - Formatted business information display with validation status indicators
 - Recommendation cards with priority levels and implementation guidance
 
-## Competitive Analysis Patterns
-- CompetitorAnalysisService implements static methods for all operations:
-  - getCompetitors for retrieving competitor data
-  - addCompetitor for adding new competitors
-  - runCompetitiveAnalysis for comprehensive analysis
-- ContentGapAnalysis component uses a tabbed interface for organized results display:
-  - Competitors tab for listing and managing competitors
-  - Advantages tab for showing competitive edges
-  - Content Gaps tab for identifying missing topics
-  - Missing Keywords tab for keyword opportunities
-  - Strategies tab for actionable recommendations
-- REST API endpoints follow standard HTTP methods:
-  - GET for retrieving competitors
-  - POST for adding competitors or running analysis
-  - DELETE for removing competitors
-- Database structure uses separate tables for different analysis aspects:
-  - competitors table for competitor information
-  - content_gaps table for identified content topics
-  - competitive_advantages table for strengths/weaknesses
-  - competitive_strategies table for recommendations
-- Analysis workflow follows a sequential process:
-  - Scrape competitor content → Extract metrics → Store data → Compare with user content → Identify gaps → Generate strategies
-- UI design uses consistent patterns:
-  - Card-based presentation for analysis results
-  - Progress indicators for metric comparisons
-  - Color-coded badges for urgency/priority levels (high, medium, low)
-  - Loading states with skeleton UI for asynchronous operations
+## Content Rewriter Component Patterns
+- Tab-based interface with sections for input, results, and history
+- Form component with validation for content and keywords
+- E-E-A-T signal preservation toggle with explanatory tooltips
+- Progress indicators during processing
+- Results display with metrics for readability and keyword usage
+- Color-coded indicators for score quality (green/amber/red)
+- History section with sortable previous rewrites
+- Copy to clipboard and export functionality
+
+## SEO Forecasting Component Patterns
+- Project and site selection dropdowns
+- Recommendation input with impact and effort assessment
+- Dynamic form for adding multiple recommendations
+- Visualization with charts for projected metrics
+- Implementation plan with phased approach
+- Color-coded confidence intervals for projections
+- History section with comparison to actual performance
+- Export options for reports and data
+
+## Competitor Strategy Component Patterns
+- Competitor selection interface
+- Strategy detection with categorized findings
+- Visual comparison between competitor and site strategies
+- Counter-tactic cards with implementation guidance
+- Priority indicators for tactical recommendations
+- Implementation timeline with phased approach
+- Export functionality for strategic planning
 
 ## Known Challenges
 - Hydration errors can occur with browser extensions like Grammarly
@@ -118,6 +149,10 @@
   - Solution: Implement normalization functions for phone numbers and addresses
 - LocalBusiness schema validation requires specialized logic for different schema formats
   - Solution: Use SchemaMarkupService with LocalBusiness schema extensions
+- LLM response times can be slow for complex analyses
+  - Solution: Implement loading states and proper user feedback
+- LLM costs can accumulate quickly with frequent use
+  - Solution: Implement caching and rate limiting
 
 ## Evolution of Decisions
 - Moved from route handlers to server components for data fetching
@@ -131,12 +166,15 @@
 - Refactored technical SEO service to use static methods for better testability
 - Added Local SEO analysis as a specialized component of the overall SEO assessment
 - Integrated Local SEO with PDF report generation for comprehensive reports
+- Implemented AI-powered services for advanced SEO features
+- Added specialized UI components for new AI features
+- Enhanced database schema with tables for AI service results
 
 ## Troubleshooting Tips
 - If encountering hydration errors, check DOM modifications from browser extensions
 - For session issues, ensure SessionProvider has fallback options
 - Network timeouts may require adjusting fetch timeout settings
-- If tests are failing, check Jest DOM matchers and mock service setup
+- For tests are failing, check Jest DOM matchers and mock service setup
 - Check for missing environment variables when Supabase connections fail
 - For E2E test failures, ensure test users exist and dev server is running
 - If PDF generation fails, check browser console for jsPDF or HTML2Canvas errors
@@ -146,6 +184,10 @@
   - Check normalization functions in LocalSEOService
 - Schema validation issues often relate to missing or malformed LocalBusiness properties
   - Inspect schema extraction logic in SchemaMarkupService integration
+- LLM errors may occur with malformed prompts or exceeded token limits
+  - Check prompt construction in the corresponding service
+- For slow LLM responses, consider implementing caching for common requests
+- If new components have missing imports, check for UI component library updates
 
 ## Code Conventions
 - Use named exports for components and functions
@@ -158,4 +200,6 @@
 - PDF generation follows a modular approach with separate methods for different sections
 - Technical SEO components use consistent naming for status indicators: "success", "warning", "error", "neutral" 
 - Local SEO components follow the same naming conventions and patterns as Technical SEO components
-- Analyzer functions follow the pattern: analyze[Feature]([parameters]): [ReturnType] 
+- Analyzer functions follow the pattern: analyze[Feature]([parameters]): [ReturnType]
+- AI services use the pattern: [Feature]Service.ts with static methods
+- UI components for AI features use tab-based interfaces with consistent navigation 

@@ -1,340 +1,618 @@
-# Technical Context
+# SEOMax Technical Context
 
-## Tech Stack
-
-The SEOMax application is built on a modern tech stack:
+## Technology Stack
 
 - **Frontend**: Next.js 15+ with App Router
 - **UI**: Tailwind CSS with shadcn/ui components
-- **Backend**: Next.js API Routes and Server Components
-- **Database**: Supabase (PostgreSQL)
-- **Authentication**: NextAuth.js with Supabase adapter
-- **State Management**: React Query for server state, Zustand for client state
-- **AI/LLM Integration**: LangChain for structured AI interactions
-- **SEO Analysis**: Custom services with Cheerio for HTML parsing
-- **Chart Visualization**: Recharts
-- **Form Handling**: React Hook Form with Zod validation
-- **Animation**: Framer Motion
-- **PDF Generation**: jsPDF with html2canvas
-- **Testing**: Jest with React Testing Library, Playwright for E2E
-
-## Architecture
-
-SEOMax follows a modern web application architecture designed for scalability and maintainability:
-
-1. **Frontend Architecture**
-   - Next.js App Router with React Server Components
-   - Clear separation between server and client components
-   - Folder-based routing structure
-   - Layout components for consistent UI
-   - Client-side interactivity with React hooks and state management
-
-2. **Backend Architecture**
-   - API Routes for data operations
-   - Server Components for server-side rendering
-   - Service layer for business logic
-   - Repository pattern for data access
-   - Middleware for request processing
-
-3. **Database Architecture**
-   - PostgreSQL with Supabase
-   - Row-Level Security (RLS) for permissions
-   - Foreign key relationships for data integrity
-   - Indexes for query performance
-   - Migrations for schema changes
-
-4. **Authentication Architecture**
-   - NextAuth.js for authentication flow
-   - JWT-based session management
-   - Middleware for route protection
-   - Supabase adapter for credential storage
-
-5. **SEO Analysis Architecture**
-   - Service-based approach for modularity
-   - Specialized analyzers for different SEO aspects
-   - Crawling capabilities with pagination
-   - Scoring system for SEO health assessment
-   - Recommendation generation based on findings
-
-6. **Local SEO Analysis Architecture**
-   - Dedicated `LocalSEOService` for local business SEO assessment
-   - Specialized analysis methods for NAP consistency, GBP detection, schema validation
-   - Integration with `SEOAnalysisIntegration` for cohesive analysis
-   - Database schema for local SEO analysis results
-   - API route for triggering and refreshing analysis
-
-7. **LLM Integration Architecture** (New)
-   - AI service layer built on LangChain with PromptTemplates and RunnableSequence
-   - Structured output parsers for consistent response formatting
-   - Prompt engineering patterns for extracting specific information
-   - Provider abstraction for switching between LLM providers
-   - Context management with chunking strategies for large content
-   - Error handling with fallback mechanisms for reliability
-   - Key integration points:
-     - NAP information extraction in LocalSEOService
-     - Content gap analysis in CompetitorAnalysisService
-     - Recommendation prioritization in TechnicalSEOService
+- **State Management**: React Query and Zustand
+- **Backend**: Supabase for database and authentication
+- **AI**: LangChain, LiteLLM, and OpenAI for AI services
+- **PDF Generation**: jsPDF and HTML2Canvas
+- **Testing**: Jest, React Testing Library, and Playwright
+- **Deployment**: Vercel
 
 ## Development Setup
 
-### Environment Requirements
-- Node.js v18+
-- npm 9+ or yarn 1.22+
-- PostgreSQL (via Supabase)
-- Supabase CLI (optional, for local development)
+1. Clone repository
+2. Install dependencies with `npm install`
+3. Set up environment variables (see `.env.example`)
+4. Start development server with `npm run dev`
+5. Run tests with `npm test`
 
-### Environment Variables
-```
-# Base
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+## Key Environment Variables
 
-# Authentication
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-nextauth-secret
-
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
-
-# LLM Providers
-OPENAI_API_KEY=your-openai-api-key
-ANTHROPIC_API_KEY=your-anthropic-api-key
-GROQ_API_KEY=your-groq-api-key
-```
-
-### Development Commands
-```
-# Install dependencies
-npm install
-
-# Run development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# Run tests
-npm test
-
-# E2E tests
-npm run test:e2e
-```
-
-## Deployment
-
-The application is deployed using Vercel with the following configuration:
-
-1. **Build Settings**
-   - Framework Preset: Next.js
-   - Build Command: `npm run build`
-   - Output Directory: `.next`
-
-2. **Environment Variables**
-   - All environment variables from development setup
-   - Production-specific values for URLs and API keys
-
-3. **Edge Functions**
-   - Authentication middleware deployed as Edge function
-   - API routes optimized for Edge runtime
-
-4. **Serverless Functions**
-   - Compute-intensive operations deployed as serverless functions
-   - Memory limits adjusted for large operations
-   - LLM API calls handled with appropriate timeouts
+- `NEXT_PUBLIC_SUPABASE_URL`: URL of Supabase project
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Public key for Supabase
+- `SUPABASE_SERVICE_ROLE_KEY`: Service role key for admin functions
+- `NEXTAUTH_SECRET`: Secret for NextAuth
+- `NEXTAUTH_URL`: URL for NextAuth
+- `OPENAI_API_KEY`: Key for OpenAI API access
+- `ANTHROPIC_API_KEY`: Key for Anthropic API access
+- `LITELLM_API_KEY`: Key for LiteLLM API
+- `LITELLM_API_URL`: URL for LiteLLM API
 
 ## Database Schema
 
-The database schema includes the following key tables:
+### Projects
+```sql
+projects (
+  id UUID PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  domain TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  user_id UUID REFERENCES auth.users NOT NULL
+)
+```
 
-1. **Users and Authentication**
-   - `auth.users`: User accounts
-   - `auth.sessions`: User sessions
-   - `public.user_profiles`: Extended user information
+### Content Pages
+```sql
+content_pages (
+  id UUID PRIMARY KEY,
+  project_id UUID REFERENCES projects NOT NULL,
+  url TEXT NOT NULL,
+  title TEXT,
+  content TEXT,
+  word_count INTEGER,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+)
+```
 
-2. **Projects and Organization**
-   - `projects`: SEO projects
-   - `project_members`: User-project relationships
-   - `organizations`: Business organizations
-   - `organization_members`: User-organization relationships
+### Keywords
+```sql
+keywords (
+  id UUID PRIMARY KEY,
+  project_id UUID REFERENCES projects NOT NULL,
+  keyword TEXT NOT NULL,
+  volume INTEGER,
+  difficulty DECIMAL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+)
+```
 
-3. **SEO Analysis**
-   - `site_crawls`: Record of site crawling operations
-   - `crawled_pages`: Individual pages from crawls
-   - `seo_analyses`: Overall SEO analysis results
-   - `technical_seo_analyses`: Technical SEO results
-   - `content_analyses`: Content analysis results
-   - `backlink_analyses`: Backlink analysis results
-   - `social_media_analyses`: Social media metrics
-   - `localseo_analyses`: Local SEO analysis results (New)
+### Technical SEO Audits
+```sql
+technical_seo_audits (
+  id UUID PRIMARY KEY,
+  site_id UUID REFERENCES projects NOT NULL,
+  domain TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  grade TEXT NOT NULL,
+  issues JSONB,
+  recommendations JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+)
+```
 
-4. **Keywords and Content**
-   - `keywords`: Target keywords
-   - `keyword_rankings`: Historical ranking data
-   - `content_briefs`: AI-generated content briefs
-   - `content_optimizations`: Content improvement tracking
+### Site Crawls
+```sql
+site_crawls (
+  id UUID PRIMARY KEY,
+  project_id UUID REFERENCES projects NOT NULL,
+  domain TEXT NOT NULL,
+  start_url TEXT NOT NULL,
+  pages_count INTEGER NOT NULL,
+  crawl_depth INTEGER NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  completed_at TIMESTAMP WITH TIME ZONE
+)
+```
 
-5. **LLM Management**
-   - `llm_models`: Model configurations
-   - `llm_usage`: Token usage tracking
-   - `llm_prompts`: Stored prompt templates
+### LLM Models
+```sql
+llm_models (
+  id UUID PRIMARY KEY,
+  provider TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  description TEXT,
+  max_tokens INTEGER,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+)
+```
 
-## API Structure
+### LLM Usage
+```sql
+llm_usage (
+  id UUID PRIMARY KEY,
+  model_id UUID REFERENCES llm_models NOT NULL,
+  project_id UUID REFERENCES projects,
+  prompt_tokens INTEGER NOT NULL,
+  completion_tokens INTEGER NOT NULL,
+  total_cost DECIMAL NOT NULL,
+  feature TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+)
+```
 
-The API is structured with the following endpoints:
+## API Endpoints
 
-1. **Authentication**
-   - `/api/auth/[...nextauth]`: NextAuth.js routes
+### Projects
+- `GET /api/projects`: Get all projects
+- `POST /api/projects`: Create a new project
+- `GET /api/projects/:id`: Get a project by ID
+- `PUT /api/projects/:id`: Update a project
+- `DELETE /api/projects/:id`: Delete a project
 
-2. **Projects**
-   - `/api/projects`: CRUD operations for projects
-   - `/api/projects/[id]/members`: Project member management
+### Keywords
+- `GET /api/keywords`: Get keywords for a project
+- `POST /api/keywords`: Add keywords to a project
+- `DELETE /api/keywords/:id`: Remove a keyword
 
-3. **SEO Analysis**
-   - `/api/analyze/technical-seo`: Technical SEO analysis
-   - `/api/analyze/content`: Content analysis
-   - `/api/analyze/backlinks`: Backlink analysis
-   - `/api/analyze/social-media`: Social media analysis
-   - `/api/analyze/local-seo`: Local SEO analysis (New)
+### Content
+- `GET /api/content`: Get content pages for a project
+- `POST /api/content`: Add content to analyze
+- `PUT /api/content/:id`: Update content analysis
+- `DELETE /api/content/:id`: Delete content analysis
 
-4. **Keywords**
-   - `/api/keywords`: Keyword management
-   - `/api/keywords/rankings`: Ranking data
-   - `/api/keywords/suggestions`: AI suggestions
+### SEO Audit
+- `POST /api/seo/audit`: Run a new SEO audit
+- `GET /api/seo/audit/:id`: Get audit results
+- `GET /api/seo/audit/pdf/:id`: Generate a PDF report
 
-5. **Content**
-   - `/api/content/briefs`: Content brief generation
-   - `/api/content/optimize`: Content optimization
+### LLM Management
+- `GET /api/llm/models`: Get available LLM models
+- `POST /api/llm/models`: Add a new LLM model
+- `GET /api/llm/usage`: Get LLM usage statistics
+- `POST /api/llm/test`: Test an LLM with a prompt
 
-6. **LLM Management**
-   - `/api/llm/models`: Model configuration
-   - `/api/llm/usage`: Usage statistics
-   - `/api/llm/test`: Model testing
+## Third-Party Services
+
+### OpenAI
+Used for content analysis, keyword research, and SEO recommendations.
+
+### LiteLLM
+Used as an abstraction layer for multiple LLM providers.
+
+### Supabase
+Used for database, authentication, and storage.
+
+### Vercel
+Used for deployment and hosting.
+
+## LLM Integration Implementation
+
+### LiteLLM Provider
+
+The centralized LLM service is implemented in `src/lib/ai/litellm-provider.ts` as a singleton:
+
+```typescript
+export class LiteLLMProvider {
+  private static instance: LiteLLMProvider;
+  
+  private constructor() {}
+  
+  static getInstance(): LiteLLMProvider {
+    if (!LiteLLMProvider.instance) {
+      LiteLLMProvider.instance = new LiteLLMProvider();
+    }
+    return LiteLLMProvider.instance;
+  }
+  
+  async callLLM(
+    prompt: string, 
+    model?: string, 
+    options?: { 
+      projectId?: string,
+      featureName?: string,
+      temperature?: number,
+      maxTokens?: number
+    }
+  ): Promise<any> {
+    // Implementation details for making API calls to LiteLLM
+    // With error handling, logging, and usage tracking
+  }
+}
+```
+
+### LocalSEOService Implementation
+
+NAP (Name, Address, Phone) extraction using LLM in `src/lib/services/LocalSEOService.ts`:
+
+```typescript
+private static async extractNAPInfo($: cheerio.CheerioAPI): Promise<NAPInfo | null> {
+  // First try schema extraction (original method)
+  
+  // Then try LLM-based extraction
+  try {
+    const llmProvider = (await import('../ai/litellm-provider')).LiteLLMProvider.getInstance();
+    
+    // Extract relevant HTML parts for analysis
+    const relevantHtmlParts = [
+      $('header').html(),
+      $('footer').html(),
+      $('.contact, .contact-us, .contact-info, #contact').html(),
+      // Additional relevant sections
+    ].filter(Boolean).join('\n');
+    
+    // Get page metadata for context
+    const pageTitle = $('title').text().trim();
+    const metaDescription = $('meta[name="description"]').attr('content') || '';
+    
+    // Construct detailed prompt
+    const prompt = `
+      Analyze this business website HTML content to extract business NAP information...
+      // Detailed prompt with instructions and output format
+    `;
+    
+    const response = await llmProvider.callLLM(prompt, undefined, {});
+    
+    // Process response with confidence checking
+    if (response?.choices?.[0]?.message?.content) {
+      const result = JSON.parse(response.choices[0].message.content);
+      
+      if (result && result.confidence.name > 70 && 
+         (result.confidence.address > 70 || result.confidence.phone > 70)) {
+        // Return structured NAP data
+      }
+    }
+  } catch (llmError) {
+    console.error('LLM extraction failed, falling back to rule-based extraction:', llmError);
+  }
+  
+  // Fall back to rule-based extraction
+}
+```
+
+### CompetitorAnalysisService Implementation
+
+Content gap analysis with semantic understanding in `src/lib/services/CompetitorAnalysisService.ts`:
+
+```typescript
+private static async _identifyContentGaps(contentPage: any, competitors: CompetitorData[]): Promise<ContentGap[]> {
+  try {
+    // Try LLM-based content gap analysis
+    try {
+      const { LiteLLMProvider } = await import('../ai/litellm-provider');
+      const llmProvider = LiteLLMProvider.getInstance();
+      
+      // Prepare limited content samples to control token usage
+      const userContent = contentPage.content?.substring(0, 5000) || '';
+      const competitorData = competitors.map(comp => ({
+        title: comp.title,
+        content: comp.content?.substring(0, 3000) || '',
+        url: comp.url
+      }));
+      
+      // Construct detailed prompt
+      const prompt = `
+        I need to identify content gaps between my page and competitor pages...
+        // Detailed prompt with instructions and output format
+      `;
+      
+      const response = await llmProvider.callLLM(prompt, undefined, {
+        projectId: contentPage.projectId
+      });
+      
+      // Process and validate response
+      if (response?.choices?.[0]?.message?.content) {
+        try {
+          const result = JSON.parse(response.choices[0].message.content);
+          // Validation logic
+          if (validResults.length > 0) {
+            return validResults;
+          }
+        } catch (parseError) {
+          console.error('Error parsing LLM response:', parseError);
+        }
+      }
+    } catch (llmError) {
+      console.error('LLM content gap analysis failed:', llmError);
+    }
+    
+    // Fall back to rule-based implementation
+    return sampleGaps;
+  } catch (error) {
+    console.error('Error in _identifyContentGaps:', error);
+    return [];
+  }
+}
+```
+
+### TechnicalSEOService Implementation
+
+Generating contextual recommendations in `src/lib/services/TechnicalSEOService.ts`:
+
+```typescript
+static async generateRecommendations(siteCrawlId: string): Promise<Record<string, string[]>> {
+  try {
+    // Fetch technical issues and site information
+    const issues = await this.getIssuesByCrawlId(siteCrawlId);
+    const crawl = await this.getCrawlData(siteCrawlId);
+    
+    if (!issues.length || !crawl) {
+      return this.getFallbackRecommendations();
+    }
+    
+    // Group issues by type for analysis
+    const issuesByType = this.groupIssuesByType(issues);
+    
+    // Try LLM-based recommendation generation
+    try {
+      const { LiteLLMProvider } = await import('../ai/litellm-provider');
+      const llmProvider = LiteLLMProvider.getInstance();
+      
+      // Prepare summary of issues for the prompt
+      const issueSummary = this.prepareIssueSummary(issuesByType);
+      
+      // Construct detailed prompt
+      const prompt = `
+        Generate prioritized SEO recommendations based on the following technical issues...
+        // Detailed prompt with instructions and output format
+      `;
+      
+      const response = await llmProvider.callLLM(prompt, undefined, { 
+        projectId: crawl.project_id 
+      });
+      
+      // Process and validate response
+      if (response?.choices?.[0]?.message?.content) {
+        try {
+          const results = JSON.parse(response.choices[0].message.content);
+          if (this.validateRecommendationsSchema(results)) {
+            return results;
+          }
+        } catch (parseError) {
+          console.error('Error parsing LLM recommendations:', parseError);
+        }
+      }
+    } catch (llmError) {
+      console.error('LLM recommendation generation failed:', llmError);
+    }
+    
+    // Fall back to rule-based recommendations
+    return this.generateRuleBasedRecommendations(issuesByType);
+  } catch (error) {
+    console.error('Error generating recommendations:', error);
+    return {};
+  }
+}
+```
+
+## Testing Approach
+
+### Unit Tests
+- Small, isolated tests for individual functions and components
+- Mock external dependencies and services
+
+### Integration Tests
+- Test interactions between components
+- Mock external APIs but use real service implementations
+
+### End-to-End Tests
+- Use Playwright to test complete user journeys
+- Run against a development environment
 
 ## Dependencies
 
-### Core Dependencies
-- `next`: 15.0.0
-- `react`: 18.2.0
-- `react-dom`: 18.2.0
-- `tailwindcss`: 3.3.0
-- `@supabase/supabase-js`: 2.10.0
-- `next-auth`: 4.24.0
-- `@tanstack/react-query`: 5.0.0
-- `zustand`: 4.4.1
-- `langchain`: 0.0.150
-- `cheerio`: 1.0.0-rc.12
-- `date-fns`: 2.30.0
-- `zod`: 3.22.2
+### Core
+- next: ^15.0.0
+- react: ^18.2.0
+- react-dom: ^18.2.0
+- next-auth: ^4.24.5
+- @supabase/auth-helpers-nextjs: ^0.8.7
+- @supabase/supabase-js: ^2.39.1
 
-### UI Dependencies
-- `@radix-ui/react-*`: Various UI primitives
-- `class-variance-authority`: 0.7.0
-- `clsx`: 2.0.0
-- `framer-motion`: 10.16.4
-- `lucide-react`: 0.294.0
-- `tailwind-merge`: 1.14.0
-- `recharts`: 2.9.0
+### UI
+- tailwindcss: ^3.3.0
+- class-variance-authority: ^0.7.0
+- clsx: ^2.0.0
+- lucide-react: ^0.294.0
+- framer-motion: ^10.16.16
 
-### Dev Dependencies
-- `typescript`: 5.2.2
-- `@types/react`: 18.2.21
-- `@types/node`: 20.6.0
-- `eslint`: 8.49.0
-- `prettier`: 3.0.3
-- `jest`: 29.6.2
-- `@testing-library/react`: 14.0.0
-- `@playwright/test`: 1.38.0
+### Data Fetching
+- @tanstack/react-query: ^5.13.4
+- zustand: ^4.4.7
 
-### Local SEO Dependencies (New)
-- Uses existing `cheerio` for HTML parsing
-- Leverages `SchemaMarkupService` for JSON-LD validation
-- Works with `GradingSystemService` for scoring
+### AI
+- langchain: ^0.0.200
+- litellm: ^1.11.1
+- openai: ^4.20.1
+- anthropic: ^0.9.0
 
-## Testing Strategy
+### PDF Generation
+- jspdf: ^2.5.1
+- html2canvas: ^1.4.1
 
-The project employs a comprehensive testing strategy:
+### Testing
+- jest: ^29.7.0
+- @testing-library/react: ^14.1.2
+- @playwright/test: ^1.40.1
 
-1. **Unit Testing**
-   - Jest for JavaScript/TypeScript testing
-   - React Testing Library for component testing
-   - Mock service worker for API mocking
-   - Coverage targets for critical code paths
+## Build and Deployment
 
-2. **Integration Testing**
-   - API route testing with supertest
-   - Component integration with React Testing Library
-   - Database operations with test databases
-
-3. **End-to-End Testing**
-   - Playwright for full E2E testing
-   - Critical user journeys automated
-   - Visual regression testing
-
-4. **Local SEO Testing Strategy** (New)
-   - Unit tests for each analyzer method
-   - Mock HTML fixtures for testing detection patterns
-   - Integration tests with SEO analysis flow
-   - E2E tests for local SEO analysis page
+- Build with `npm run build`
+- Test with `npm test`
+- Deploy with Vercel CLI or GitHub integration
 
 ## Technical Constraints
 
-1. **Performance**
-   - Optimize for Core Web Vitals
-   - Large site analysis requires pagination
-   - LLM API rate limits
+- Node.js v18+ required
+- PostgreSQL v15+ required for Supabase
+- API keys required for various services
+- Environment variables must be configured properly
+- Rate limits on external APIs (OpenAI, Anthropic, etc.)
+- Token usage constraints for LLM services
 
-2. **Security**
-   - Row-Level Security in Supabase
-   - Environment variable protection
-   - API route authentication
-   - CSRF protection
+## Performance Considerations
 
-3. **Scalability**
-   - Database connection pooling
-   - Caching for frequently accessed data
-   - Optimistic UI updates
-   - Background processing for intensive operations
+- LLM API calls are expensive and can be slow
+- Implement caching for LLM responses
+- Control token usage with input truncation
+- Use streaming responses where appropriate
+- Implement proper error handling and fallbacks
+- Monitor usage and costs with analytics
 
-4. **Browser Compatibility**
-   - Support for modern browsers (last 2 versions)
-   - Graceful degradation for older browsers
-   - Responsive design for all device sizes
+## Technologies Used
 
-## Local SEO Implementation (New)
+### Frontend
+- **Next.js 15+** - React framework with App Router for server and client components
+- **React** - UI library for component-based development
+- **TypeScript** - Typed JavaScript for better development experience
+- **Tailwind CSS** - Utility-first CSS framework
+- **shadcn/ui** - Component library built on Radix UI
+- **React Query** - Data fetching and state management
+- **Zustand** - Lightweight state management
+- **Framer Motion** - Animation library
+- **Recharts** - Charting library for data visualization
 
-The Local SEO implementation expands SEOMax's capabilities to assess business location-specific SEO factors:
+### Backend
+- **Supabase** - PostgreSQL database with auth and RLS
+- **Next.js API Routes** - Serverless functions for API endpoints
+- **NextAuth.js** - Authentication for Next.js
+- **LangChain** - Framework for LLM applications
 
-1. **Core Functionality**
-   - NAP (Name, Address, Phone) consistency checker
-   - Google Business Profile detection
-   - LocalBusiness schema.org validation
-   - Local keyword usage analysis
-   - Maps embed detection
+### AI Integration
+- **LiteLLM** - Abstraction layer for LLM providers
+- **OpenAI API** - Primary LLM provider
+- **Anthropic Claude** - Alternative LLM for specific use cases
+- **Langchain** - Framework for LLM application development
 
-2. **Technical Implementation**
-   - `LocalSEOService` class with specialized analysis methods
-   - Database schema extensions for storing analysis results
-   - API route for triggering analysis
-   - Integration with existing SEO analysis flow
-   - UI components for displaying results
+### SEO Analysis
+- **Crawlee** - Web crawling and scraping library
+- **Cheerio** - HTML parsing
+- **Lighthouse** - Performance and SEO analysis
+- **Chrome Headless** - Browser automation
 
-3. **Data Flow**
-   - Site pages crawled and analyzed for local signals
-   - HTML parsed with Cheerio for DOM traversal
-   - Schema.org markup extracted and validated
-   - Contact details pattern-matched across pages
-   - Google Business Profile links detected
-   - Map embeds identified and verified
-   - Results scored and stored in database
-   - Recommendations generated based on findings
+### Visualization
+- **jsPDF** - PDF generation
+- **HTML2Canvas** - Screenshot and image generation
+- **Recharts** - Interactive charts and graphs
+- **CountUp.js** - Animated number counters
 
-4. **Technical Considerations**
-   - NAP format normalization to handle variations
-   - Schema validation against LocalBusiness specification
-   - Address matching with fuzzy comparison
-   - Local keyword context analysis
-   - Integration with PDFGenerationService for reports 
+### Testing
+- **Jest** - JavaScript testing framework
+- **React Testing Library** - Testing React components
+- **Playwright** - E2E testing framework
+- **MSW** - Mock Service Worker for API mocking
+
+## New AI Features Technical Stack
+
+### AI Content Rewriter with SEO Context
+- **Implementation**: TypeScript service with static methods
+- **Database**: `content_rewrites` table in Supabase with RLS
+- **Key Technologies**:
+  - LangChain for structured LLM interactions
+  - Readability algorithms (Flesch-Kincaid)
+  - JSON parsing for E-E-A-T signal analysis
+  - React Query for data fetching and mutations
+  - Tailwind/shadcn for UI components
+  - Tab-based interface with form inputs and results display
+
+### SEO ROI Forecasting
+- **Implementation**: TypeScript service with forecasting algorithms
+- **Database**: `seo_forecasts` and `site_metrics` tables
+- **Key Technologies**:
+  - LiteLLM for provider abstraction
+  - Statistical projection algorithms
+  - JSON-based data modeling
+  - Recharts for visualization
+  - React Query for fetching and managing data
+  - Form components with validation
+
+### SERP Volatility Prediction
+- **Implementation**: Static service with prediction methods
+- **Database**: Tables for storing predictions and historical data
+- **Key Technologies**:
+  - LLM integration for pattern recognition
+  - Historical data analysis
+  - React Query for data management
+  - Error handling middleware for robust operation
+
+### Schema Markup Generator
+- **Implementation**: Service with template-based generation
+- **Database**: Tables for templates and implementations
+- **Key Technologies**:
+  - JSON-LD generation and validation
+  - Template system for common schema types
+  - Code highlighting for markup display
+  - Wizard-based implementation flow
+
+### Competitor Strategy Decoder
+- **Implementation**: Service for competitor analysis
+- **Database**: Tables for storing strategies and counter-tactics
+- **Key Technologies**:
+  - LLM for strategic analysis
+  - Comparative data processing
+  - React components for strategy visualization
+  - Implementation planning algorithms
+
+## Development Setup
+
+### Required Environment Variables
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+NEXTAUTH_SECRET=
+NEXTAUTH_URL=
+```
+
+### Local Development
+1. Clone the repository
+2. Install dependencies with `npm install`
+3. Set up environment variables in `.env.local`
+4. Run database migrations
+5. Start the development server with `npm run dev`
+
+### Database Migrations
+- Stored in `/migrations` directory
+- Run with Supabase CLI or manually
+- Include RLS policies for security
+
+## Technical Constraints
+
+### Performance
+- LLM API calls can have high latency (1-5 seconds)
+- PDF generation for large reports is resource-intensive
+- Full site crawls may time out for very large sites
+
+### Security
+- API keys stored as environment variables
+- Row-level security enforced at database level
+- User data isolation through RLS policies
+- NextAuth for secure session management
+
+### Scalability
+- Serverless architecture for most API routes
+- Database connection pooling for high traffic
+- Rate limiting for expensive operations
+- Caching for common queries
+
+## Dependencies
+Major dependencies and their versions:
+
+```json
+{
+  "dependencies": {
+    "@radix-ui/react-icons": "^1.3.0",
+    "@tanstack/react-query": "^5.0.0",
+    "langchain": "^0.0.167",
+    "next": "^15.0.0",
+    "next-auth": "^4.24.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.10.1",
+    "zustand": "^4.4.6",
+    "jspdf": "^2.5.1",
+    "html2canvas": "^1.4.1",
+    "date-fns": "^2.30.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "@types/react": "^18.2.37",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.53.0",
+    "jest": "^29.7.0",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.3.5",
+    "typescript": "^5.2.2"
+  }
+}
+``` 
