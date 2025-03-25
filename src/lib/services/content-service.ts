@@ -82,7 +82,10 @@ export interface CompetitorContentTable {
 // Content Page Service
 export const ContentPageService = {
   async getContentPages(projectId: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('content_pages')
       .select('*')
@@ -98,7 +101,10 @@ export const ContentPageService = {
   },
 
   async getContentPage(id: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('content_pages')
       .select('*')
@@ -114,7 +120,10 @@ export const ContentPageService = {
   },
 
   async createContentPage(data: Omit<ContentPageTable, 'id' | 'created_at' | 'updated_at' | 'analyzed_at'>) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data: newPage, error } = await supabase
       .from('content_pages')
       .insert([data])
@@ -130,7 +139,10 @@ export const ContentPageService = {
   },
 
   async updateContentPage(id: string, data: Partial<Omit<ContentPageTable, 'id' | 'created_at' | 'updated_at'>>) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data: updatedPage, error } = await supabase
       .from('content_pages')
       .update(data)
@@ -147,7 +159,10 @@ export const ContentPageService = {
   },
 
   async deleteContentPage(id: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { error } = await supabase
       .from('content_pages')
       .delete()
@@ -162,7 +177,10 @@ export const ContentPageService = {
   },
 
   async analyzeContentPage(id: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     
     // Set status to analyzing
     await supabase
@@ -170,28 +188,60 @@ export const ContentPageService = {
       .update({ status: 'analyzing' })
       .eq('id', id);
 
-    // In a real implementation, this would trigger a background job
-    // to fetch and analyze the content. Here we're just updating the status.
+    // Get the content page to analyze
+    const { data: contentPage, error } = await supabase
+      .from('content_pages')
+      .select('*')
+      .eq('id', id)
+      .single();
+      
+    if (error || !contentPage) {
+      console.error('Error fetching content page for analysis:', error);
+      return false;
+    }
     
-    // For demonstration purposes, let's update with a delay
-    setTimeout(async () => {
+    try {
+      // Call the new content analysis API
+      const response = await fetch('/api/analyze/content', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contentId: id,
+          content: contentPage.content,
+          title: contentPage.title,
+          targetKeywords: contentPage.target_keywords || [],
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Content analysis failed');
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('Error analyzing content:', err);
+      
+      // Update status to reflect failure
       await supabase
         .from('content_pages')
         .update({ 
-          status: 'analyzed',
-          analyzed_at: new Date().toISOString(),
-          readability_score: Math.floor(Math.random() * 100),
-          seo_score: Math.floor(Math.random() * 100)
+          status: 'not-analyzed',
+          last_analyzed_at: new Date().toISOString()
         })
         .eq('id', id);
-    }, 2000);
-
-    return true;
+        
+      return false;
+    }
   },
 
   async updateContentSuggestion(id: string, implemented: boolean) {
     try {
-      const supabase = createClient();
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+      );
       
       const { data, error } = await supabase
         .from('content_suggestions')
@@ -211,7 +261,10 @@ export const ContentPageService = {
   },
 
   async getContentPageWithAnalysis(id: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     
     // Get the content page
     const { data: contentPage, error: contentError } = await supabase
@@ -268,7 +321,10 @@ export const ContentPageService = {
 // Content Analysis Service
 export const ContentAnalysisService = {
   async getContentAnalyses(contentPageId: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('content_analysis')
       .select('*')
@@ -284,7 +340,10 @@ export const ContentAnalysisService = {
   },
 
   async getLatestContentAnalysis(contentPageId: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('content_analysis')
       .select('*')
@@ -306,7 +365,10 @@ export const ContentAnalysisService = {
   },
 
   async createContentAnalysis(data: Omit<ContentAnalysisTable, 'id' | 'created_at'>) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data: newAnalysis, error } = await supabase
       .from('content_analysis')
       .insert([data])
@@ -322,7 +384,10 @@ export const ContentAnalysisService = {
   },
 
   async updateAnalysisWithSuggestions(analysisId: string, suggestions: any[]) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     
     // First insert all the suggestions
     const { data: newSuggestions, error: suggestionsError } = await supabase
@@ -347,7 +412,10 @@ export const ContentAnalysisService = {
 // Content Suggestion Service
 export const ContentSuggestionService = {
   async getSuggestions(analysisId: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('content_suggestions')
       .select('*')
@@ -363,7 +431,10 @@ export const ContentSuggestionService = {
   },
 
   async implementSuggestion(suggestionId: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('content_suggestions')
       .update({ implemented: true })
@@ -380,7 +451,10 @@ export const ContentSuggestionService = {
   },
 
   async rejectSuggestion(suggestionId: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('content_suggestions')
       .update({ 
@@ -526,7 +600,10 @@ export const ContentGapService = {
 // Topic Cluster Service
 export const TopicClusterService = {
   async getTopicClusters(projectId: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('topic_clusters')
       .select('*')
@@ -542,7 +619,10 @@ export const TopicClusterService = {
   },
 
   async getTopicCluster(id: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('topic_clusters')
       .select('*')
@@ -558,7 +638,10 @@ export const TopicClusterService = {
   },
 
   async createTopicCluster(data: Omit<TopicClusterTable, 'id' | 'created_at' | 'updated_at'>) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data: newCluster, error } = await supabase
       .from('topic_clusters')
       .insert([data])
@@ -574,7 +657,10 @@ export const TopicClusterService = {
   },
 
   async updateTopicCluster(id: string, data: Partial<Omit<TopicClusterTable, 'id' | 'created_at' | 'updated_at'>>) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data: updatedCluster, error } = await supabase
       .from('topic_clusters')
       .update(data)
@@ -591,7 +677,10 @@ export const TopicClusterService = {
   },
 
   async deleteTopicCluster(id: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { error } = await supabase
       .from('topic_clusters')
       .delete()
@@ -609,7 +698,10 @@ export const TopicClusterService = {
 // Content Brief Service
 export const ContentBriefService = {
   async getContentBriefs(projectId: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('content_briefs')
       .select('*')
@@ -625,7 +717,10 @@ export const ContentBriefService = {
   },
 
   async getContentBrief(id: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('content_briefs')
       .select('*')
@@ -641,7 +736,10 @@ export const ContentBriefService = {
   },
 
   async createContentBrief(data: Omit<ContentBriefTable, 'id' | 'created_at' | 'updated_at'>) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data: newBrief, error } = await supabase
       .from('content_briefs')
       .insert([data])
@@ -657,7 +755,10 @@ export const ContentBriefService = {
   },
 
   async updateContentBrief(id: string, data: Partial<Omit<ContentBriefTable, 'id' | 'created_at' | 'updated_at'>>) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data: updatedBrief, error } = await supabase
       .from('content_briefs')
       .update(data)
@@ -674,7 +775,10 @@ export const ContentBriefService = {
   },
 
   async deleteContentBrief(id: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { error } = await supabase
       .from('content_briefs')
       .delete()
@@ -692,7 +796,10 @@ export const ContentBriefService = {
 // Competitor Content Service
 export const CompetitorContentService = {
   async getCompetitorContent(projectId: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data, error } = await supabase
       .from('competitor_content')
       .select('*')
@@ -708,7 +815,10 @@ export const CompetitorContentService = {
   },
 
   async createCompetitorContent(data: Omit<CompetitorContentTable, 'id' | 'created_at'>) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { data: newContent, error } = await supabase
       .from('competitor_content')
       .insert([data])
@@ -724,7 +834,10 @@ export const CompetitorContentService = {
   },
 
   async deleteCompetitorContent(id: string) {
-    const supabase = createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    );
     const { error } = await supabase
       .from('competitor_content')
       .delete()

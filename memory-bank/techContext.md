@@ -140,7 +140,8 @@ llm_usage (
 
 ### Keywords
 - `GET /api/keywords`: Get keywords for a project
-- `POST /api/keywords`: Add keywords to a project
+- `POST /api/keywords` with action "research": Run keyword research
+- `POST /api/keywords` with action "trends": Analyze keyword trends
 - `DELETE /api/keywords/:id`: Remove a keyword
 
 ### Content
@@ -159,6 +160,220 @@ llm_usage (
 - `POST /api/llm/models`: Add a new LLM model
 - `GET /api/llm/usage`: Get LLM usage statistics
 - `POST /api/llm/test`: Test an LLM with a prompt
+
+## Keyword Trend Analysis Implementation
+
+### TrendAnalyzer Service
+
+The keyword trend analysis is implemented in `src/lib/ai/trend-analyzer.ts` as a static service class:
+
+```typescript
+export class TrendAnalyzer {
+  /**
+   * Analyzes trends for a given keyword by either using an external API
+   * or falling back to LLM-based analysis when API is unavailable
+   */
+  static async analyzeTrends(
+    keyword: string,
+    industry?: string,
+    options?: {
+      projectId?: string,
+      userId?: string
+    }
+  ): Promise<TrendAnalysisResponse> {
+    try {
+      // First attempt to use external API if configured
+      if (process.env.TREND_API_KEY) {
+        return await this.analyzeWithExternalAPI(keyword, industry);
+      }
+      
+      // Fallback to LLM-based analysis
+      return await this.analyzeWithLLM(keyword, industry, options);
+    } catch (error) {
+      // Error handling and logging
+      return this.generateFallbackResponse(keyword, error);
+    }
+  }
+  
+  // Additional private methods for implementation
+}
+```
+
+### Dual-Source Architecture
+
+The trend analysis feature uses a dual-source approach:
+
+1. **External API Integration** (Primary Source):
+   - Configured via `TREND_API_KEY` environment variable
+   - Fetches accurate historical data when available
+   - Provides higher quality and more reliable trends data
+
+2. **LLM-Based Analysis** (Fallback):
+   - Uses the LiteLLMProvider for LLM access
+   - Generates synthetic historical data to improve context
+   - Implements robust parsing for structured JSON output
+   - Provides consistent availability when APIs are unavailable
+
+### Response Structure
+
+The trend analysis returns a consistent response structure regardless of the data source:
+
+```typescript
+interface TrendAnalysisResponse {
+  keyword: string;
+  industry?: string;
+  trendDirection: 'increasing' | 'decreasing' | 'stable';
+  seasonality: {
+    hasSeasonal: boolean;
+    peakMonths?: string[];
+    lowMonths?: string[];
+    description?: string;
+  };
+  competitivePressure: {
+    level: 'high' | 'medium' | 'low';
+    description: string;
+  };
+  projections: {
+    shortTerm: string;
+    longTerm: string;
+  };
+  recommendedStrategies: string[];
+  historicalData?: Array<{
+    date: string;
+    position?: number;
+    volume?: number;
+    competition?: number;
+  }>;
+  dataSource: 'api' | 'llm';
+}
+```
+
+### Mock Data Generation
+
+To enhance LLM predictions, the TrendAnalyzer generates realistic historical data:
+
+```typescript
+private static generateMockHistoricalData(
+  keyword: string,
+  trendDirection: 'increasing' | 'decreasing' | 'stable'
+): HistoricalDataPoint[] {
+  const data: HistoricalDataPoint[] = [];
+  const now = new Date();
+  
+  // Generate 6 months of historical data
+  for (let i = 6; i >= 1; i--) {
+    const date = new Date();
+    date.setMonth(now.getMonth() - i);
+    
+    // Generate realistic values based on trend direction
+    const position = this.generatePositionValue(trendDirection, i, keyword);
+    const volume = this.generateVolumeValue(trendDirection, i, keyword);
+    const competition = this.generateCompetitionValue(trendDirection, i);
+    
+    data.push({
+      date: date.toISOString().split('T')[0],
+      position,
+      volume,
+      competition
+    });
+  }
+  
+  return data;
+}
+```
+
+### Integration with LiteLLMProvider
+
+The TrendAnalyzer integrates with the existing LiteLLMProvider for LLM access:
+
+```typescript
+private static async analyzeWithLLM(
+  keyword: string,
+  industry?: string,
+  options?: {
+    projectId?: string,
+    userId?: string
+  }
+): Promise<TrendAnalysisResponse> {
+  // Generate mock data to enhance context
+  const mockData = this.generateMockHistoricalData(keyword, 'stable');
+  
+  // Create prompt with context
+  const prompt = this.createTrendAnalysisPrompt(keyword, industry, mockData);
+  
+  // Call LLM through provider
+  const liteLLMProvider = LiteLLMProvider.getInstance();
+  const response = await liteLLMProvider.callLLM(
+    prompt,
+    undefined, // Use default model
+    {
+      projectId: options?.projectId,
+      userId: options?.userId,
+      feature: 'keyword-trend-analysis'
+    }
+  );
+  
+  // Parse and validate response
+  return this.parseLLMResponse(response, keyword, industry, mockData);
+}
+```
+
+### Error Handling and Parsing
+
+Robust error handling is implemented throughout the analysis process:
+
+```typescript
+private static parseLLMResponse(
+  response: string,
+  keyword: string,
+  industry?: string,
+  mockData?: HistoricalDataPoint[]
+): TrendAnalysisResponse {
+  try {
+    // Extract JSON from response
+    const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || 
+                      response.match(/{[\s\S]*}/);
+    
+    if (jsonMatch) {
+      const jsonStr = jsonMatch[1] || jsonMatch[0];
+      const parsedData = JSON.parse(jsonStr);
+      
+      // Validate and return structured data
+      return this.validateAndStructureResponse(parsedData, keyword, industry, mockData);
+    }
+    
+    // Handle non-JSON responses
+    return this.generateFallbackResponse(
+      keyword, 
+      new Error('Failed to extract JSON from LLM response'),
+      industry,
+      mockData
+    );
+  } catch (error) {
+    // Log error and return fallback
+    console.error('Error parsing LLM response:', error);
+    return this.generateFallbackResponse(keyword, error, industry, mockData);
+  }
+}
+```
+
+### UI Integration
+
+The trend analysis feature is integrated into the keyword analysis interface using a tab-based approach:
+
+1. **Trends Tab**: Displays trend analysis results with visualizations
+2. **Analysis Button**: Triggers trend analysis for selected keyword
+3. **Results Display**: Shows trend direction, seasonality, competition, and recommendations
+
+### Future Enhancements
+
+Planned improvements for the trend analysis feature:
+
+1. **Enhanced External API Integration**: Support for multiple trend data providers
+2. **Historical Data Visualization**: Interactive charts for trend data
+3. **Trend Comparison**: Compare trends across multiple keywords
+4. **Alert System**: Notifications for significant trend changes
+5. **Seasonal Planning**: Content calendar suggestions based on trend seasonality
 
 ## Third-Party Services
 

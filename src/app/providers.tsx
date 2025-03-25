@@ -4,7 +4,7 @@ import { SessionProvider } from "next-auth/react";
 import { ReactNode, useEffect, useState, useRef } from "react";
 import { ExtendedAuthProvider } from "@/components/providers/auth-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createSupabaseClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
 
 interface ProvidersProps {
   children: ReactNode;
@@ -301,7 +301,7 @@ export function Providers({ children }: ProvidersProps) {
     const checkDatabaseConnectivity = async () => {
       try {
         console.log("Running diagnostic query to check database connectivity");
-        const { count, error: diagError } = await createSupabaseClient()
+        const { count, error: diagError } = await createClient()
           .from('llm_models')
           .select('id', { count: 'exact', head: true });
           

@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { createSupabaseClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { createServerClient } from '@/lib/supabase/server';
 import { SEOAuditReport, SEOAuditCategoryScore } from './seo-audit-service';
 // For server-side rendering in Node.js environment
@@ -27,7 +27,7 @@ export class PDFGenerationService {
    */
   static async generatePDFFromReport(reportId: string): Promise<string> {
     // First, get the report data
-    const supabase = createSupabaseClient();
+    const supabase = createClient();
     
     // Get the report data
     const { data: reportData, error: reportError } = await supabase

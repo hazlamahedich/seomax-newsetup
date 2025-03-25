@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LLMModelRepository } from '@/lib/ai/models/repository';
-import { createSupabaseClient } from '@/lib/supabase/client';
-
-// Initialize Supabase client
-const supabase = createSupabaseClient();
+import { createClient } from '@/lib/supabase/client';
 
 // Add headers function for enabling CORS
 const addCorsHeaders = (response: NextResponse) => {
@@ -54,7 +51,7 @@ async function handleRequest(request: NextRequest) {
     try {
       console.log("Running diagnostic query to check database connectivity");
       // Fix for Supabase REST API - use count: 'exact' parameter instead of count(*)
-      const { count, error: diagError } = await supabase
+      const { count, error: diagError } = await createClient()
         .from('llm_models')
         .select('id', { count: 'exact', head: true });
       

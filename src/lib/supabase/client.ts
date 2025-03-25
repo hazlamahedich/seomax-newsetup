@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient as supabaseCreateClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -12,128 +12,55 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Create a single instance of the Supabase client for use throughout the app
-export const supabase = createClient(
+export const supabase = supabaseCreateClient(
   supabaseUrl || 'https://placeholder-url.supabase.co', 
   supabaseAnonKey || 'placeholder-key',
   {
     auth: {
       persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
     },
-    global: {
-      fetch: async (url, options) => {
-        // Use our default fetch implementation
-        const response = await fetch(url, {
-          ...options,
-          // Set timeouts to prevent hanging requests
-          signal: options?.signal || (AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined),
-        });
-        
-        return response;
-      }
-    }
   }
 );
 
-// Export the createClient function for other services to use
-export { createClient };
-
 // Create a client function that can be used to create new instances
-export const createSupabaseClient = () => {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('Missing Supabase credentials. Using placeholder values which will fail.');
-  }
-
-  const client = createClient(
-    supabaseUrl || 'https://placeholder-url.supabase.co', 
-    supabaseAnonKey || 'placeholder-key',
+export const createClient = (url?: string, key?: string) => {
+  return supabaseCreateClient(
+    url || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    key || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
     {
       auth: {
         persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
       },
-      global: {
-        fetch: async (url, options) => {
-          console.log(`Supabase client request to: ${url}`);
-          try {
-            // Use our default fetch implementation with timeouts
-            const response = await fetch(url, {
-              ...options,
-              // Set timeouts to prevent hanging requests
-              signal: options?.signal || (AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined),
-            });
-            
-            if (!response.ok) {
-              console.warn(`Supabase request failed with status ${response.status}: ${url}`);
-              try {
-                const textResponse = await response.clone().text();
-                console.warn(`Response body: ${textResponse.substring(0, 200)}${textResponse.length > 200 ? '...' : ''}`);
-              } catch (err) {
-                console.warn('Could not read response body:', err);
-              }
-            }
-            
-            return response;
-          } catch (error) {
-            console.error(`Supabase client fetch error for ${url}:`, error);
-            throw error;
-          }
-        }
-      }
     }
   );
-
-  // Test connection by making a simple query
-  if (typeof window === 'undefined') { // Only on server-side
-    (async () => {
-      try {
-        console.log('Testing Supabase connection...');
-        const { data, error } = await client.from('llm_models').select('count(*)', { count: 'exact' });
-        if (error) {
-          console.error('Supabase connection test failed:', error);
-        } else {
-          console.log('Supabase connection successful, returned count:', data);
-        }
-      } catch (err) {
-        console.error('Supabase connection test exception:', err);
-      }
-    })();
-  }
-
-  return client;
 };
 
-// Create a client that uses the session pooler for database-intensive operations
-export const createPooledSupabaseClient = () => {
+// Create a client for database-intensive operations that uses the connection pooler
+export const createPooledClient = () => {
   if (!supabasePoolerUrl) {
     console.warn('Supabase Pooler URL not found, using regular client instead');
-    return createSupabaseClient();
+    return createClient();
   }
 
-  return createClient(
+  return supabaseCreateClient(
     supabaseUrl || 'https://placeholder-url.supabase.co',
     supabaseAnonKey || 'placeholder-key',
     {
       auth: {
         persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
       },
-      global: {
-        headers: {
-          'x-connection-pool': supabasePoolerUrl
-        },
-        fetch: async (url, options) => {
-          const response = await fetch(url, {
-            ...options,
-            signal: options?.signal || (AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined),
-          });
-          
-          return response;
-        }
-      }
     }
   );
-}; 
+};
+
+// This client is for client-side usage (singleton)
+// It's already initialized with the public environment variables
+export const browserClient = supabaseCreateClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+  {
+    auth: {
+      persistSession: true,
+    },
+  }
+); 

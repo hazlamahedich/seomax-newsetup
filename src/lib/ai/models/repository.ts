@@ -1,8 +1,8 @@
-import { createSupabaseClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { LLMModel, LLMUsage, UsageStatsResponse } from './usage';
 
 // Initialize Supabase client
-const supabase = createSupabaseClient();
+const supabase = createClient();
 
 // Add a model cache to reduce database queries
 const modelCache = new Map<string, { model: LLMModel, timestamp: number }>();
@@ -255,7 +255,7 @@ export const LLMModelRepository = {
       // Third attempt: Try using a new Supabase client
       try {
         console.log("Repository: Trying third approach (new client)");
-        const freshClient = createSupabaseClient();
+        const freshClient = createClient();
         
         const { data, error } = await freshClient
           .from('llm_models')
@@ -297,7 +297,7 @@ export const LLMModelRepository = {
       // Fourth attempt: Try using direct SQL
       try {
         console.log("Repository: Trying fourth approach (direct SQL)");
-        const freshClient = createSupabaseClient();
+        const freshClient = createClient();
         
         const { data, error } = await freshClient.rpc('fetch_model_by_id', { model_id: id });
         
@@ -343,86 +343,65 @@ export const LLMModelRepository = {
   // Get the default LLM model
   async getDefaultModel(): Promise<LLMModel | null> {
     try {
-      // First check cache for any default model
-      for (const [_, cacheEntry] of modelCache.entries()) {
-        if ((Date.now() - cacheEntry.timestamp) < CACHE_TTL && cacheEntry.model.isDefault) {
-          console.log("Repository: Using cached default model:", cacheEntry.model.name);
-          return cacheEntry.model;
+      console.log("Repository: Fetching default model");
+      
+      // First, try to find cached default model to avoid database query
+      let cachedDefaultModel: LLMModel | null = null;
+      
+      // Check if any cached model is the default
+      for (const [_, cached] of modelCache.entries()) {
+        if (cached.model.isDefault && (Date.now() - cached.timestamp) < CACHE_TTL) {
+          cachedDefaultModel = cached.model;
+          break;
         }
       }
       
-      // Query the database if no cached default model found
+      if (cachedDefaultModel) {
+        console.log("Repository: Using cached default model:", cachedDefaultModel.name);
+        return cachedDefaultModel;
+      }
+      
+      // Otherwise query the database
       const { data, error } = await supabase
         .from('llm_models')
         .select('*')
         .eq('is_default', true)
-        .single();
-  
-      if (error || !data) {
-        console.error('Error fetching default LLM model:', error);
-        
-        // Try a fallback approach using limit(1) instead of single()
-        try {
-          const { data: fallbackData, error: fallbackError } = await supabase
-            .from('llm_models')
-            .select('*')
-            .eq('is_default', true)
-            .limit(1);
-            
-          if (fallbackError || !fallbackData || fallbackData.length === 0) {
-            console.error('Fallback query for default model also failed:', fallbackError);
-            return null;
-          }
-          
-          const model = fallbackData[0];
-          const modelObj = {
-            id: model.id,
-            name: model.name,
-            provider: model.provider,
-            modelName: model.model_name,
-            apiKey: model.api_key,
-            baseUrl: model.base_url,
-            temperature: model.temperature,
-            maxTokens: model.max_tokens,
-            costPerToken: model.cost_per_token,
-            costPerThousandTokens: model.cost_per_thousand_tokens,
-            isDefault: model.is_default,
-            createdAt: new Date(model.created_at),
-            updatedAt: new Date(model.updated_at),
-          };
-          
-          // Update cache
-          modelCache.set(model.id, { model: modelObj, timestamp: Date.now() });
-          
-          return modelObj;
-        } catch (fallbackQueryError) {
-          console.error('Exception during fallback query for default model:', fallbackQueryError);
-          return null;
-        }
+        .limit(1);
+    
+      if (error) {
+        console.error('Repository: Error fetching default model:', error);
+        return null;
       }
-  
+      
+      if (!data || data.length === 0) {
+        console.log('Repository: No default model found');
+        return null;
+      }
+      
+      const model = data[0];
+      
       const modelObj = {
-        id: data.id,
-        name: data.name,
-        provider: data.provider,
-        modelName: data.model_name,
-        apiKey: data.api_key,
-        baseUrl: data.base_url,
-        temperature: data.temperature,
-        maxTokens: data.max_tokens,
-        costPerToken: data.cost_per_token,
-        costPerThousandTokens: data.cost_per_thousand_tokens,
-        isDefault: data.is_default,
-        createdAt: new Date(data.created_at),
-        updatedAt: new Date(data.updated_at),
+        id: model.id,
+        name: model.name,
+        provider: model.provider,
+        modelName: model.model_name,
+        apiKey: model.api_key,
+        baseUrl: model.base_url,
+        temperature: model.temperature,
+        maxTokens: model.max_tokens,
+        costPerToken: model.cost_per_token,
+        costPerThousandTokens: model.cost_per_thousand_tokens,
+        isDefault: model.is_default,
+        createdAt: new Date(model.created_at),
+        updatedAt: new Date(model.updated_at),
       };
       
       // Update cache
-      modelCache.set(data.id, { model: modelObj, timestamp: Date.now() });
+      modelCache.set(modelObj.id, { model: modelObj, timestamp: Date.now() });
       
       return modelObj;
-    } catch (err) {
-      console.error('Unexpected error fetching default model:', err);
+    } catch (error) {
+      console.error('Repository: Error in getDefaultModel:', error);
       return null;
     }
   },

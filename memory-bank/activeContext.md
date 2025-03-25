@@ -1,9 +1,30 @@
 # Active Context: SEOMax Development
 
 ## Current Focus
-We are implementing and optimizing the content analysis features of SEOMax. Our recent work has focused on:
+We are implementing and enhancing the keyword analysis features of SEOMax, with a strong focus on trend analysis capabilities. Our recent work has focused on:
 
-1. Implementing content analysis components:
+1. Implementing keyword trend analysis functionality:
+   - Created the `TrendAnalyzer` service for analyzing keyword trends
+   - Added dual-source approach with external API support and LLM fallback
+   - Implemented sophisticated trend analysis with direction, seasonality, and projections
+   - Enhanced UI with a dedicated Trends tab in the keyword analysis interface
+   - Created visualization components for displaying trend data
+   - Added robust error handling and parsing for LLM responses
+   - Implemented mock data generation for improved LLM predictions
+
+2. Fixing keyword analysis display issues:
+   - Corrected data structure mismatch between API and UI expectations
+   - Updated UI components to properly access and display research data
+   - Fixed JSON parsing issues in LLM responses
+   - Enhanced error logging for improved debugging
+
+3. Improving the LiteLLMProvider functionality:
+   - Fixed model name handling for local Ollama models
+   - Enhanced error handling for API calls
+   - Improved logging for debugging LLM interactions
+   - Fixed prompt template syntax errors
+
+4. Implementing content analysis components:
    - ContentOptimizer for applying SEO suggestions
    - ContentPerformance for tracking content metrics
    - ContentGapAnalysis for competitor comparison (✓ completed)
@@ -11,12 +32,12 @@ We are implementing and optimizing the content analysis features of SEOMax. Our 
    - ImageAltTextAnalyzer for image accessibility and SEO
    - InternalLinkingAnalyzer for website link structure
 
-2. Enhancing existing components:
+5. Enhancing existing components:
    - ContentBrief with collaboration features
    - TopicClusterMap with improved visualization
    - ContentAnalyzer.tsx with tabbed interface for different analysis types
 
-3. Developing backend services:
+6. Developing backend services:
    - ContentAnalyzerService with methods for various analysis types (readability, keywords, structure)
    - CompetitorAnalysisService for comprehensive competitor content analysis (✓ completed)
    - ImageAltTextAnalyzerService for analyzing image alt text quality and presence
@@ -24,45 +45,26 @@ We are implementing and optimizing the content analysis features of SEOMax. Our 
    - Services for managing content, suggestions, performance, and gap analysis
    - Integration of all content analysis services into SEOAnalysisIntegration
 
-4. Fixing critical application issues:
+7. Fixing critical application issues:
    - React hydration errors caused by browser extensions
    - Session fetch errors with "Unexpected end of JSON input"
    - Supabase client export problems
    - Middleware improvements for session handling
+   - Authentication user validation issues (✓ completed)
+   - Row-Level Security (RLS) policy bypass with admin client (✓ completed)
+   - AI response JSON parsing improvements (✓ completed)
 
-5. Enhancing the testing infrastructure for SEOMax, with a specific emphasis on end-to-end (E2E) testing using Playwright. All the required E2E tests from phase 4 of the testing strategy have been successfully implemented.
+8. Enhancing the testing infrastructure for SEOMax, with a specific emphasis on end-to-end (E2E) testing using Playwright. All the required E2E tests from phase 4 of the testing strategy have been successfully implemented.
 
-6. Rebuilding and improving the authentication system:
+9. Rebuilding and improving the authentication system:
    - Fixed NextAuth implementation for better integration with Next.js App Router
    - Implemented proper error handling for authentication flows
    - Enhanced the middleware for protected routes and redirects
    - Resolved authentication session issues for smoother user experience
    - Rebuilt the dashboard layout for optimal responsiveness and usability
-
-7. Implementing a fully functional dashboard/projects page:
-   - Created a grid-based project listing with project cards
-   - Implemented CRUD operations for projects using React Query and Zustand
-   - Added proper loading, error, and empty states for improved UX
-   - Integrated dialog components for project creation and editing
-   - Implemented confirmation flow for project deletion
-   - Added smooth animations using Framer Motion
-
-8. Creating an LLM management system for AI-powered features:
-   - Implemented an admin dashboard for managing LLM models
-   - Created an interface for testing models with custom prompts
-   - Built a usage tracking system for monitoring tokens and costs
-   - Set up a database structure for LLM models and usage statistics
-   - Added visualization of usage trends over time
-   - Created an API route for testing LLM models
-   - Implemented model initialization for quicker setup
-
-9. Building and improving the SEO Audit feature:
-   - Implemented a comprehensive SEO Audit system with detailed reporting
-   - Created a centralized state management system using Zustand
-   - Built a PDF export feature for SEO audit reports using jsPDF and HTML2Canvas
-   - Designed professional PDF reports with branding, sections for scores, recommendations, and issues
-   - Added a dedicated PDF button component to trigger exports from multiple locations
-   - Integrated the PDF generation with the Zustand store for a consistent user experience
+   - Enhanced user validation to prevent invalid user data in storage (✓ completed)
+   - Added robust user ID validation with additional type checks (✓ completed)
+   - Implemented graceful error handling for auth validation (✓ completed)
 
 10. **Technical SEO Analysis Feature**:
     - Created `TechnicalSEODisplay` component with detailed metrics and visualizations
@@ -172,9 +174,49 @@ We are implementing and optimizing the content analysis features of SEOMax. Our 
     - Planned fallback mechanisms for when LLM services are unavailable
     - Prepared for validation and benchmarking of LLM-enhanced functions
 
+18. **Keyword Trend Analysis Feature Implementation**:
+    - Created a centralized `TrendAnalyzer` service that:
+      - Provides dual functionality with external API or LLM fallback
+      - Generates intelligent trend analysis using historical data
+      - Creates realistic mock data when needed for better LLM predictions
+      - Offers comprehensive trend insights including:
+        - Trend direction (increasing, decreasing, stable)
+        - Seasonality patterns
+        - Competitive pressure analysis
+        - Short and long-term projections
+        - Strategic action recommendations
+      - Implements robust error handling with graceful fallbacks
+      - Processes and cleans LLM output for reliable JSON parsing
+    - Enhanced keyword analysis features in the UI:
+      - Added trends tab to keyword analysis interface
+      - Implemented visualization for trends data
+      - Created tabular display of historical data
+      - Added user controls for initiating trend analysis
+      - Incorporated data source indicators (API vs. LLM)
+    - Integrated with the centralized LiteLLM provider for consistent AI access
+    - Added environment variable support for optional external trend API
+
 We're currently focused on further improving the competitive analysis feature with more advanced content gap detection capabilities and enhancing the recommendation engine to provide more actionable insights.
 
 ## Recent Changes
+
+### Authentication and Database Access Improvements
+- Fixed session validation issues in `ExtendedAuthProvider`:
+  - Enhanced the `isValidUser` function to validate user ID, email, and name
+  - Added comprehensive error handling with try-catch blocks
+  - Improved type safety with proper TypeScript interfaces
+  - Added `__supabase` marker property to User type
+- Resolved Row-Level Security (RLS) policy issues:
+  - Implemented admin client with service role key for bypassing RLS
+  - Updated `TopicClusterService` to use admin client for database operations
+  - Fixed project access control to properly handle permissions
+- Enhanced AI response handling in `TopicClusterService`:
+  - Improved JSON parsing with multiple fallback strategies
+  - Enhanced prompt engineering for more reliable responses
+  - Added robust error handling for malformed AI responses
+- Consolidated Supabase client usage:
+  - Updated imports to use `createClient` consistently
+  - Fixed remaining references to non-existent `createSupabaseClientInstance`
 
 ### SEO Analyzer Implementation
 - Created a comprehensive SEO analyzer that fulfills all project requirements:
@@ -198,175 +240,22 @@ We're currently focused on further improving the competitive analysis feature wi
   - Performance metrics and audits
   - Analysis results and issues
 
-### Social Media Integration Implementation
-- Created a comprehensive social media analysis system with `SocialMediaAnalysisService`
-- Implemented profile detection for major platforms (Facebook, Twitter, Instagram, LinkedIn, YouTube, Pinterest, TikTok)
-- Added profile verification with public metrics collection (followers, engagement rates, post frequency)
-- Built social media integration assessment that checks for:
-  - Social media links on website
-  - Social sharing buttons
-  - Open Graph meta tags
-  - Twitter Cards
-  - Pinterest Rich Pins
-- Created content alignment analysis between website and social media platforms
-- Implemented comprehensive scoring and grading system for social media presence
-- Built recommendation engine with actionable suggestions for improvement
-- Added historical tracking for social media metrics
-- Created a dedicated UI with the `SocialMediaDisplay` component featuring:
-  - Overview tab with key metrics and scoring
-  - Profiles tab displaying platform-specific information
-  - Integration tab showing website integration elements
-  - Trends tab for historical performance tracking
-- Integrated social media analysis into the comprehensive SEO audit system
-- Created a dedicated page for detailed social media analysis at `/dashboard/seo-audit/[id]/social-media`
-
-### SEO Audit PDF Export Implementation
-- Created a specialized PDF generation service using jsPDF and HTML2Canvas
-- Designed a professional PDF report layout with branding elements and structured sections
-- Implemented comprehensive report content generation covering overall scores, category breakdowns, recommendations, and technical issues
-- Added dynamic color coding based on scores and issue severity
-- Built pagination handling for multi-page reports with proper headers and footers
-- Integrated PDF generation with the SEO Audit store for centralized state management
-- Created a reusable SEOAuditPdfButton component for triggering PDF exports
-- Implemented proper error handling and loading states during PDF generation
-- Added a download mechanism that creates properly named PDF files based on the report
-
-### LLM Management Implementation
-- Created a dedicated admin page for managing LLM models at `/dashboard/admin/llm`
-- Implemented a tab-based interface with Models, Usage & Costs, and Test Models tabs
-- Built a form for adding and editing LLM models with provider selection
-- Added visualization of usage statistics with charts for daily usage and model breakdown
-- Implemented a testing interface to try models with custom prompts
-- Created database tables for storing LLM models and tracking usage
-- Built an API endpoint at `/api/llm/test` for testing models with prompts
-- Fixed form context issues in the Test Models tab
-- Added automatic initialization for default models
-- Implemented proper error handling for database setup
-
-### Projects Page Implementation
-- Created a fully functional dashboard/projects page with a modern grid layout
-- Implemented project card components displaying project details and actions
-- Added creation, editing, and deletion functionality using dialog components
-- Integrated with React Query for data fetching and Zustand for state management
-- Added proper error handling, loading states, and empty state display
-- Implemented animations using Framer Motion for a polished user experience
-- Fixed critical dependency issues with React Query and Zustand integration
-
-### Authentication System Rebuild
-- Completely rebuilt NextAuth implementation to work properly with Next.js App Router
-- Fixed route handler implementation to avoid issues with async access to params, headers and cookies
-- Created a robust error handling approach for auth-related API requests
-- Improved the session provider with better error recovery and fallback mechanisms
-- Enhanced the middleware for more precise route protection and redirects
-- Integrated Supabase authentication more cleanly with NextAuth session management
-- Updated useAuth hook to leverage both NextAuth and Supabase authentication
-
-### Dashboard UI Enhancement
-- Redesigned dashboard layout for better responsiveness
-- Implemented mobile-friendly sidebar with toggle functionality
-- Created responsive cards for displaying analytics information
-- Fixed sidebar navigation and active state highlighting
-- Enhanced user profile and authentication display
-- Removed debugging panels and outdated navigation elements
-- Improved overall dashboard appearance with better spacing and hierarchy
-- Added mobile overlay for sidebar to improve usability on small screens
-- Created consistent card-based layout pattern for better visual organization
-
-### Components Completed
-- ContentOptimizer - Complete with full optimization workflow
-- ContentPerformance - Complete with metrics tracking and visualization
-- ContentGapAnalysis - Complete with competitor analysis features
-- ContentBrief - Enhanced with collaboration features and SEO insights
-- TopicClusterMap - Enhanced with improved visualization and relationship management
-- Project Cards - Complete with full CRUD operations and animations
-- LLM Management - Complete with model management, usage tracking, and testing
-- SEOAuditPdfButton - Complete with PDF generation and download functionality
-- PDFGenerationService - Complete with comprehensive report formatting and structure
-- CrawleeService - Complete with JavaScript rendering and site crawling
-- LighthouseService - Complete with performance analysis and metrics collection
-- SEOAnalysisIntegration - Complete with comprehensive analysis orchestration
-- BacklinkAnalysisDisplay - Complete with metrics visualization, high-value backlink tracking, and competitive analysis
-
-### Services Added
-- Added methods to ContentAnalyzer:
-  - compareWithCompetitors()
-  - generateSeoSuggestions()
-  - analyzeSentiment()
-  - performGapAnalysis()
-  - generateOptimizationSuggestions()
-
-- Created additional services:
-  - ContentAnalysisService
-  - ContentSuggestionService
-  - ContentPerformanceService
-  - ContentGapAnalysisService
-  - LLMModelRepository
-  - LLMUsageRepository
-  - LiteLLMProvider
-  - PDFGenerationService
-  - CrawleeService
-  - LighthouseService
-  - SEOAnalysisIntegration
-  - BacklinkAnalysisService
-
-### Tests Created
-- ContentOptimizer.test.tsx
-- ContentPerformance.test.tsx
-- ContentGapAnalysis.test.tsx
-
-### Bug Fixes
-- Fixed React hydration errors by adding suppressHydrationWarning to html and body elements
-- Resolved session fetch errors by implementing a fallback session object
-- Fixed Supabase client export issues for proper service integration
-- Enhanced error handling for fetch operations with timeouts
-- Optimized middleware for better session management
-- Fixed authentication flow issues with NextAuth and Supabase integration
-- Resolved sidebar navigation on mobile devices
-- Fixed dashboard layout responsiveness issues
-- Fixed missing dependencies issue with React Query QueryClientProvider
-- Resolved Zustand dependency for project state management
-- Fixed FormLabel component usage in the Test Models tab
-- Resolved React context issues with form components
-- Fixed linter errors in the CrawleeService, LighthouseService, and CoreWebVitalsService
-
-### E2E Test Implementation
-- Created comprehensive E2E tests for user onboarding, keyword research, content optimization, technical SEO audits, and report generation.
-- Added support files including test fixtures, helpers, and a setup script for test data.
-- Implemented a full test environment setup process.
-- Added new npm scripts for running E2E tests in various modes.
-
-1. Added a user feedback system with a dialog component accessible from all pages
-2. Implemented toast notifications for user feedback
-3. Created the database schema for the feedback system
-4. Integrated the feedback system with the main application layout
-5. Added the Supabase session pooler for better database performance
-6. Created an admin dashboard for feedback management and statistics
-
-### Technical SEO Implementation Completion
-- Completed all eight required technical SEO checks:
-  - Mobile responsiveness testing - validates viewport configuration and tap targets
-  - Page speed analysis - reports Core Web Vitals and performance metrics
-  - Schema markup validation - checks for structured data implementation
-  - Robots.txt and sitemap validation - verifies crawlability configuration
-  - SSL certification check - ensures secure connections
-  - HTTP/2 implementation detection - examines protocol headers and suggests improvements
-  - Image optimization assessment - analyzes image size and format efficiency
-  - JavaScript and CSS minification - detects resource optimization status
-- Enhanced TechnicalSEOService with:
-  - Comprehensive method for detecting HTTP/2 implementation
-  - JavaScript resource minification analysis
-  - CSS resource minification analysis
-  - Detailed solution recommendations for each issue
-  - Severity classification for all technical issues
-- Updated TechnicalSEODisplay component with:
-  - Visual indicators for all check statuses
-  - Progress components for score visualization
-  - Categorized issue display by severity
-  - Tabbed interface for organized information display
-- Created comprehensive E2E tests for technical SEO functionality:
-  - Test cases for each technical check
-  - Validation of UI components and displayed information
-  - Verification of appropriate recommendations
+### Keyword Analysis and Trend Analysis Enhancement
+- Fixed issues with keyword analysis display in the Analysis tab:
+  - Corrected data structure mismatch between API response and UI expectations
+  - Updated UI components to properly access and display keyword research data
+  - Fixed prompt template syntax errors in the keyword analyzer
+  - Resolved issues with model name handling for local Ollama models
+- Implemented new keyword trend analysis feature:
+  - Created `TrendAnalyzer` class with LLM fallback capability
+  - Added support for external API integration when available
+  - Implemented mock data generation for better trend predictions
+  - Enhanced keyword UI with trend visualization and data display
+  - Added API route for trend analysis requests
+  - Created proper error handling for parsing LLM responses
+  - Added detailed logging for troubleshooting LLM interactions
+  - Implemented data visualization for trend direction and historical data
+  - Structured trend response with actionable recommendations
 
 ## Next Steps
 1. Enhance the admin dashboard with filtering and search capabilities
@@ -749,4 +638,31 @@ We're enhancing SEOMax with advanced AI-powered features that provide deeper ins
 - All AI services use the centralized LLM service for consistency
 - New services follow the established static method pattern
 - UI components maintain consistency with existing design system
-- Database tables include proper RLS policies for security 
+- Database tables include proper RLS policies for security
+
+1. **Dual-Source Keyword Trend Analysis**: We've implemented a flexible approach that first attempts to use an external API (if configured) and automatically falls back to LLM-based analysis when the API is unavailable. This provides the best of both worlds: accurate data from specialized APIs when available, with consistent functionality through LLM fallback when external services aren't accessible.
+
+2. **Mock Data Enhancement for LLM Context**: When using LLM for trend analysis, we generate realistic mock historical data to provide better context. This approach improves the quality of LLM predictions by giving it structured historical patterns to analyze, rather than asking it to generate trends from scratch.
+
+3. **Shared Response Structure**: Regardless of the data source (external API or LLM), we maintain a consistent response structure for trend analysis, ensuring that the UI can display results consistently without needing source-specific handling.
+
+4. **Error Resilience Strategy**: We've implemented multiple fallback mechanisms and error handling throughout the trend analysis flow, ensuring that the feature degrades gracefully when faced with issues like parsing errors, timeout issues, or API unavailability.
+
+5. **Structured JSON Output from LLM**: For the LLM-based analysis, we've carefully engineered prompts to encourage structured JSON output, complemented by robust parsing logic to handle potential variations in LLM responses.
+
+## Recent Changes
+- Fixed authentication issues with NextAuth and Supabase integration
+- Resolved Row Level Security (RLS) policy issues for projects and topic clusters
+- Enhanced AI response parsing for more resilient topic cluster generation
+- Implemented fallback mechanisms for database access and AI services
+
+## Next Steps
+- Continue testing authentication flow to ensure stability
+- Implement additional safeguards for handling potentially invalid data
+- Add further fallback mechanisms for other AI-dependent services
+- Document new patterns in system architecture
+
+## Active Decisions
+- Using admin client with service role token only for specific operations requiring RLS bypass
+- Implementing progressive enhancement for data access: try with regular client first, fallback to admin client
+- Maintaining dual authentication system while ensuring user source tracking 

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { ScraperService, ScrapedContent } from "@/lib/services/ScraperService";
+import { scrapeUrl, ScrapedContent } from "@/lib/services/ScraperService";
 import { WebsiteMetricsService } from "@/lib/services/WebsiteMetricsService";
 
 // Interface for competitor data
@@ -122,7 +122,7 @@ export class CompetitorAnalysisService {
   static async addCompetitor(projectId: string, url: string): Promise<CompetitorData | null> {
     try {
       // Fetch the competitor content using the scraper
-      const scrapedContent = await ScraperService.scrapeUrl(url);
+      const scrapedContent = await scrapeUrl(url);
       
       if (!scrapedContent) {
         throw new Error(`Failed to scrape content from ${url}`);

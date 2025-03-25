@@ -19,12 +19,14 @@ import { Toaster } from '@/components/ui/toaster';
 import { 
   Search, 
   TrendingUp, 
+  TrendingDown,
   FileText, 
   ArrowUp, 
   ArrowDown, 
   Minus,
   BarChart3,
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 
 // Additional debug logging for module initialization
@@ -112,6 +114,9 @@ export function ClientKeywordsPage({ projectId }: ClientKeywordsPageProps) {
   const [keywordInsights, setKeywordInsights] = useState<any | null>(null);
   const [updatingRankings, setUpdatingRankings] = useState(false);
   const [addingKeyword, setAddingKeyword] = useState(false);
+  const [trendInsights, setTrendInsights] = useState<any>(null);
+  const [analyzingTrends, setAnalyzingTrends] = useState(false);
+  const [selectedKeywordForTrends, setSelectedKeywordForTrends] = useState<string>("");
 
   console.log('Keywords Page - User authenticated:', !!activeUser);
 
@@ -378,6 +383,58 @@ export function ClientKeywordsPage({ projectId }: ClientKeywordsPageProps) {
     const sum = keywordRankings.reduce((acc, kw) => acc + kw.position, 0);
     return (sum / keywordRankings.length).toFixed(1);
   };
+
+  // Analyze trends
+  const analyzeTrends = async (keyword: string) => {
+    try {
+      setAnalyzingTrends(true);
+      setSelectedKeywordForTrends(keyword);
+      
+      // Get the project details for the industry context
+      if (!project) {
+        throw new Error('Project details not available');
+      }
+      
+      // Using the website name as a simple industry identifier
+      const industry = project.website_name;
+      
+      // Call the API endpoint
+      const response = await fetch('/api/keywords', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          keyword,
+          industry,
+          action: 'trends'
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to analyze trends');
+      }
+      
+      const data = await response.json();
+      setTrendInsights(data.data);
+      
+      toast({
+        title: 'Trend analysis complete',
+        description: `Trend analysis for "${keyword}" is ready`,
+      });
+      
+    } catch (err: any) {
+      console.error('Error analyzing trends:', err);
+      toast({
+        title: 'Trend analysis failed',
+        description: err.message || 'Failed to analyze trends',
+        variant: 'destructive',
+      });
+    } finally {
+      setAnalyzingTrends(false);
+    }
+  };
   
   return (
     <ErrorBoundary>
@@ -600,46 +657,43 @@ export function ClientKeywordsPage({ projectId }: ClientKeywordsPageProps) {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {/* Show analysis results here */}
-                        <div className="space-y-4">
-                          <div>
-                            <h3 className="text-lg font-medium mb-2">Related Keywords</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              {keywordInsights.research?.relatedKeywords?.slice(0, 6).map((kw: any, i: number) => (
-                                <div key={i} className="border rounded-md p-3">
-                                  <p className="font-medium">{kw.keyword}</p>
-                                  <div className="flex justify-between text-sm text-muted-foreground">
-                                    <span>Volume: {kw.searchVolume}</span>
-                                    <span>Difficulty: {kw.difficulty}</span>
-                                  </div>
+                        <div>
+                          <h3 className="text-lg font-medium mb-2">Related Keywords</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {keywordInsights.relatedKeywords?.slice(0, 6).map((kw: any, i: number) => (
+                              <div key={i} className="border rounded-md p-3">
+                                <p className="font-medium">{kw.keyword}</p>
+                                <div className="flex justify-between text-sm text-muted-foreground">
+                                  <span>Volume: {kw.searchVolume}</span>
+                                  <span>Difficulty: {kw.difficulty}</span>
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            ))}
                           </div>
-                          
-                          <div>
-                            <h3 className="text-lg font-medium mb-2">Content Ideas</h3>
-                            <div className="space-y-2">
-                              {keywordInsights.research?.contentIdeas?.slice(0, 3).map((idea: any, i: number) => (
-                                <div key={i} className="border rounded-md p-3">
-                                  <p className="font-medium">{idea.title}</p>
-                                  <div className="flex justify-between text-sm text-muted-foreground">
-                                    <span>Format: {idea.format}</span>
-                                    <span>Relevance: {idea.topicRelevance}</span>
-                                  </div>
+                        </div>
+                        
+                        <div>
+                          <h3 className="text-lg font-medium mb-2">Content Ideas</h3>
+                          <div className="space-y-2">
+                            {keywordInsights.contentIdeas?.slice(0, 3).map((idea: any, i: number) => (
+                              <div key={i} className="border rounded-md p-3">
+                                <p className="font-medium">{idea.title}</p>
+                                <div className="flex justify-between text-sm text-muted-foreground">
+                                  <span>Format: {idea.format}</span>
+                                  <span>Relevance: {idea.topicRelevance}</span>
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            ))}
                           </div>
-                          
-                          <div>
-                            <h3 className="text-lg font-medium mb-2">Strategy</h3>
-                            <Card className="bg-muted/50">
-                              <CardContent className="pt-4">
-                                <p>{keywordInsights.research?.recommendedStrategy}</p>
-                              </CardContent>
-                            </Card>
-                          </div>
+                        </div>
+                        
+                        <div>
+                          <h3 className="text-lg font-medium mb-2">Strategy</h3>
+                          <Card className="bg-muted/50">
+                            <CardContent className="pt-4">
+                              <p>{keywordInsights.recommendedStrategy}</p>
+                            </CardContent>
+                          </Card>
                         </div>
                       </div>
                     )}
@@ -652,16 +706,131 @@ export function ClientKeywordsPage({ projectId }: ClientKeywordsPageProps) {
                 <Card>
                   <CardHeader>
                     <CardTitle>Keyword Trends</CardTitle>
-                    <CardDescription>Historical performance of your keywords</CardDescription>
+                    <CardDescription>Historical performance and predictions</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="py-10 text-center border border-dashed rounded-md">
-                      <TrendingUp className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-20" />
-                      <h3 className="text-lg font-medium mb-1">Trend data coming soon</h3>
-                      <p className="text-muted-foreground mb-4">
-                        Historical trend data will be available after tracking keywords for some time
-                      </p>
-                    </div>
+                    {!selectedKeyword ? (
+                      <div className="py-10 text-center border border-dashed rounded-md">
+                        <TrendingUp className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-20" />
+                        <h3 className="text-lg font-medium mb-1">Select a keyword first</h3>
+                        <p className="text-muted-foreground mb-4">
+                          Choose a keyword from the list to analyze its trends
+                        </p>
+                      </div>
+                    ) : analyzingTrends ? (
+                      <div className="py-10 text-center">
+                        <Loader2 className="h-10 w-10 text-muted-foreground mx-auto mb-3 animate-spin" />
+                        <h3 className="text-lg font-medium mb-1">Analyzing trends</h3>
+                        <p className="text-muted-foreground">
+                          This may take a moment...
+                        </p>
+                      </div>
+                    ) : trendInsights ? (
+                      <div className="space-y-6">
+                        {/* Data Source Indicator */}
+                        <div className="text-right text-sm text-muted-foreground">
+                          <span className="inline-flex items-center">
+                            <span className={`w-2 h-2 rounded-full mr-2 ${trendInsights.dataSource === 'api' ? 'bg-green-500' : 'bg-amber-500'}`}></span>
+                            Data Source: {trendInsights.dataSource === 'api' ? 'External API' : 'AI Analysis'}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="border rounded-md p-4">
+                            <h3 className="font-medium mb-2">Trend Direction</h3>
+                            <div className="flex items-center">
+                              {trendInsights.trendDirection === 'Increasing' ? (
+                                <TrendingUp className="h-5 w-5 text-green-500 mr-2" />
+                              ) : trendInsights.trendDirection === 'Decreasing' ? (
+                                <TrendingDown className="h-5 w-5 text-red-500 mr-2" />
+                              ) : (
+                                <Minus className="h-5 w-5 text-amber-500 mr-2" />
+                              )}
+                              <span>{trendInsights.trendDirection}</span>
+                            </div>
+                          </div>
+                          <div className="border rounded-md p-4">
+                            <h3 className="font-medium mb-2">Seasonality</h3>
+                            <p>{trendInsights.seasonality}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="border rounded-md p-4">
+                          <h3 className="font-medium mb-3">Competitive Pressure</h3>
+                          <p>{trendInsights.competitivePressure}</p>
+                        </div>
+                        
+                        <div>
+                          <h3 className="text-lg font-medium mb-3">Future Projections</h3>
+                          <div className="space-y-3">
+                            <div className="border rounded-md p-4">
+                              <h4 className="font-medium mb-1">Short-term (1-3 months)</h4>
+                              <p>{trendInsights.futureProjections.shortTerm}</p>
+                            </div>
+                            <div className="border rounded-md p-4">
+                              <h4 className="font-medium mb-1">Long-term (6-12 months)</h4>
+                              <p>{trendInsights.futureProjections.longTerm}</p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h3 className="text-lg font-medium mb-3">Action Recommendations</h3>
+                          <Card className="bg-muted/50">
+                            <CardContent className="pt-4">
+                              <p>{trendInsights.actionRecommendations}</p>
+                            </CardContent>
+                          </Card>
+                        </div>
+                        
+                        {/* Historical Data Visualization */}
+                        {trendInsights.historicalData && trendInsights.historicalData.length > 0 && (
+                          <div>
+                            <h3 className="text-lg font-medium mb-3">Historical Data</h3>
+                            <div className="overflow-x-auto">
+                              <table className="w-full border-collapse">
+                                <thead>
+                                  <tr className="bg-muted/50">
+                                    <th className="p-2 text-left">Month</th>
+                                    <th className="p-2 text-left">Position</th>
+                                    <th className="p-2 text-left">Search Volume</th>
+                                    <th className="p-2 text-left">Competition</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {trendInsights.historicalData.map((data: any, i: number) => (
+                                    <tr key={i} className="border-b">
+                                      <td className="p-2">{data.month}</td>
+                                      <td className="p-2">{data.position}</td>
+                                      <td className="p-2">{data.searchVolume}</td>
+                                      <td className="p-2">{data.competition}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Add button to re-analyze trends */}
+                        <div className="flex justify-end">
+                          <Button onClick={() => analyzeTrends(selectedKeyword)}>
+                            Re-analyze Trends
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="py-10 text-center border border-dashed rounded-md">
+                        <TrendingUp className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-20" />
+                        <h3 className="text-lg font-medium mb-1">Trend analysis available</h3>
+                        <p className="text-muted-foreground mb-4">
+                          Analyze trends for "{selectedKeyword}"
+                        </p>
+                        <Button onClick={() => analyzeTrends(selectedKeyword)}>
+                          Analyze Trends
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>

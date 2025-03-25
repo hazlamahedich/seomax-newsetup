@@ -32,7 +32,7 @@ interface KeywordRanking {
 }
 
 export default function KeywordsPage() {
-  const { supabaseUser: user, getActiveUser } = useExtendedAuth();
+  const { supabaseUser: user, getActiveUser, refreshAuth, synchronizeSupabaseSession } = useExtendedAuth();
   const router = useRouter();
   const { toast } = useToast();
   
@@ -46,48 +46,128 @@ export default function KeywordsPage() {
   
   // Fetch projects and keywords when user is available
   useEffect(() => {
-    const activeUser = getActiveUser();
-    if (activeUser) {
-      fetchProjects(activeUser);
-    }
-  }, [getActiveUser]);
+    const initializeData = async () => {
+      try {
+        // Try to synchronize sessions first
+        await synchronizeSupabaseSession();
+        
+        const activeUser = getActiveUser();
+        
+        if (!activeUser) {
+          console.warn('No active user found, trying to refresh authentication');
+          // Try refreshing authentication
+          const refreshedUser = await refreshAuth();
+          
+          if (refreshedUser) {
+            console.log('Authentication refreshed successfully, fetching projects');
+            await fetchProjects(refreshedUser);
+          } else {
+            console.error('Failed to get active user after refresh');
+            // Handle missing user appropriately
+            toast({
+              title: 'Session Expired',
+              description: 'Your session has expired. Please sign in again to continue.',
+              variant: 'destructive',
+            });
+            
+            // Optionally redirect to login page
+            // router.push('/login');
+          }
+        } else {
+          console.log('Active user found, fetching projects');
+          await fetchProjects(activeUser);
+        }
+      } catch (error) {
+        console.error('Error initializing keyword page data:', error);
+        toast({
+          title: 'Authentication Problem',
+          description: 'We encountered a problem with your session. Please try refreshing the page or signing in again.',
+          variant: 'destructive',
+        });
+      }
+    };
+    
+    initializeData();
+  }, [getActiveUser, refreshAuth, synchronizeSupabaseSession, toast, router]);
   
   useEffect(() => {
     if (selectedProject) {
       fetchKeywords(selectedProject);
     }
-  }, [selectedProject]);
+  }, [selectedProject, synchronizeSupabaseSession]);
   
   const fetchProjects = async (activeUser: any) => {
-    if (!activeUser) return;
+    if (!activeUser) {
+      console.error('Error fetching projects: No active user found');
+      toast({
+        title: 'Authentication Error',
+        description: 'No user account detected. Please sign in again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate the user ID is a valid non-empty UUID
+    if (!activeUser.id || typeof activeUser.id !== 'string' || !activeUser.id.trim()) {
+      console.error('Error fetching projects: Invalid user ID:', activeUser.id);
+      toast({
+        title: 'Authentication Error',
+        description: 'User ID is invalid. Please sign in again.',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     try {
       setLoading(true);
       
+      console.log('Fetching projects for user:', activeUser.id);
+      
+      // Ensure Supabase client has the latest session
+      await synchronizeSupabaseSession();
+      
+      // Create new query with proper type checking and error handling
       let projectsQuery = supabase.from('projects').select('*');
       
       if (!activeUser.email?.endsWith('@seomax.com')) {
+        console.log('Fetching projects for non-admin user, filtering by user_id:', activeUser.id);
         projectsQuery = projectsQuery.eq('user_id', activeUser.id);
+      } else {
+        console.log('Fetching all projects for admin user');
       }
       
-      const { data, error } = await projectsQuery.order('created_at', { ascending: false });
+      const { data, error, status } = await projectsQuery.order('created_at', { ascending: false });
         
       if (error) {
-        console.error('Error fetching projects:', error);
+        const errorMessage = `Error fetching projects: ${error.message} (${status})`;
+        console.error(errorMessage, error);
         toast({
-          title: 'Error',
-          description: 'Failed to load your projects. Please try again later.',
+          title: 'Database Error',
+          description: 'Failed to load your projects. Please try refreshing.',
           variant: 'destructive',
         });
       } else {
+        console.log(`Fetched ${data?.length || 0} projects successfully`);
         setProjects(data || []);
         // Set the first project as selected if available
         if (data && data.length > 0 && !selectedProject) {
           setSelectedProject(data[0].id);
+        } else if (data && data.length === 0) {
+          console.log('No projects found for user');
+          toast({
+            title: 'No Projects Found',
+            description: 'Create your first project to get started.',
+          });
         }
       }
     } catch (err) {
-      console.error('Error fetching projects:', err);
+      const errorMessage = err instanceof Error 
+        ? err.message 
+        : (typeof err === 'object' && err !== null) 
+          ? JSON.stringify(err) 
+          : 'Unknown error';
+      
+      console.error('Error fetching projects:', errorMessage);
       toast({
         title: 'Unexpected error',
         description: 'An unexpected error occurred while loading your projects.',
@@ -103,24 +183,42 @@ export default function KeywordsPage() {
     try {
       setLoading(true);
       
-      const { data, error } = await supabase
+      console.log(`Fetching keywords for project: ${projectId}`);
+      
+      // Ensure Supabase client has the latest session
+      await synchronizeSupabaseSession();
+      
+      const { data, error, status } = await supabase
         .from('keyword_rankings')
         .select('*')
         .eq('project_id', projectId)
         .order('position', { ascending: true });
         
       if (error) {
-        console.error('Error fetching keywords:', error);
+        const errorMessage = `Error fetching keywords: ${error.message} (${status})`;
+        console.error(errorMessage, error);
         toast({
-          title: 'Error',
-          description: 'Failed to load keywords. Please try again later.',
+          title: 'Database Error',
+          description: 'Failed to load keywords. Please try refreshing.',
           variant: 'destructive',
         });
+        setKeywords([]);
       } else {
+        console.log(`Fetched ${data?.length || 0} keywords successfully`);
         setKeywords(data || []);
+        
+        if (data && data.length === 0) {
+          console.log('No keywords found for this project');
+        }
       }
     } catch (err) {
-      console.error('Error fetching keywords:', err);
+      const errorMessage = err instanceof Error 
+        ? err.message 
+        : (typeof err === 'object' && err !== null) 
+          ? JSON.stringify(err) 
+          : 'Unknown error';
+      
+      console.error('Error fetching keywords:', errorMessage);
       toast({
         title: 'Unexpected error',
         description: 'An unexpected error occurred while loading keywords.',
@@ -227,8 +325,18 @@ export default function KeywordsPage() {
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to analyze keyword');
+        // Check if the response is JSON before trying to parse it
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to analyze keyword');
+        } else {
+          // If not JSON, use text or status
+          const errorText = await response.text();
+          throw new Error(`Server error (${response.status}): ${
+            errorText.length > 100 ? 'Internal server error' : errorText
+          }`);
+        }
       }
       
       const data = await response.json();

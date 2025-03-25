@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server';
-import { createSupabaseClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { TechnicalSEOService } from './TechnicalSEOService';
 import { SiteCrawlerService } from './SiteCrawlerService';
 import { PDFGenerationService } from './PDFGenerationService';
@@ -360,7 +360,7 @@ export class SEOAuditService {
     projectId: string,
     options: SEOAuditOptions
   ): Promise<void> {
-    const supabase = createSupabaseClient();
+    const supabase = createClient();
     
     try {
       // In a production environment, this would be handled by a background worker

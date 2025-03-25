@@ -8,11 +8,10 @@
 
 // Constants for localStorage keys
 export const STORAGE_KEYS = {
-  USER: 'seomax_user',
-  SESSION: 'seomax_session',
-  AUTH_TIME: 'seomax_auth_time',
-  IS_ADMIN: 'seomax_is_admin',
-};
+  USER: 'seomax:user',
+  AUTH_TIME: 'seomax:auth_time',
+  IS_ADMIN: 'seomax:is_admin',
+} as const;
 
 // User type definition for better type safety
 export type UserData = {
@@ -23,15 +22,73 @@ export type UserData = {
   [key: string]: any;
 };
 
+// Define StoredUser interface based on current implementation
+export interface StoredUser {
+  user: UserData | null;
+  isAdmin: boolean;
+  timestamp: number;
+}
+
+/**
+ * Validates that a user object has a valid ID
+ */
+export function isValidUser(user: UserData | null): boolean {
+  // More robust validation to catch edge cases
+  try {
+    if (!user) return false;
+    
+    // Must have a valid ID
+    if (!user.id) return false;
+    
+    // Explicitly check for empty string
+    if (user.id === "") {
+      console.warn('[SessionUtils] Invalid user ID: Empty string ID');
+      return false;
+    }
+    
+    // ID must be a string, not an empty object
+    if (typeof user.id === 'object') {
+      console.warn('[SessionUtils] Invalid user ID: ID is an object instead of string', user.id);
+      return false;
+    }
+    
+    // ID must be a string and not empty
+    if (typeof user.id !== 'string' || user.id.trim() === '') {
+      return false;
+    }
+    
+    // If email is present, it must be a string
+    if (user.email !== undefined && (typeof user.email !== 'string')) {
+      return false;
+    }
+    
+    // If name is present, it must be a string or null
+    if (user.name !== undefined && user.name !== null && typeof user.name !== 'string') {
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('[SessionUtils] Error validating user:', error, user);
+    return false;
+  }
+}
+
 /**
  * Save user session data to localStorage
- * Only saves if the data has actually changed
+ * Only saves if the data has changed and has a valid ID
  */
 export const saveSessionToStorage = (userData: UserData | null, isAdmin = false): void => {
   if (typeof window === 'undefined') return;
   
   try {
     if (userData) {
+      // Validate the user ID is non-empty
+      if (!isValidUser(userData)) {
+        console.error('[SessionUtils] Cannot save user with invalid ID:', userData);
+        return;
+      }
+      
       // Check if the data has changed before writing
       const currentData = localStorage.getItem(STORAGE_KEYS.USER);
       const currentAdmin = localStorage.getItem(STORAGE_KEYS.IS_ADMIN) === 'true';
@@ -66,19 +123,19 @@ export const saveSessionToStorage = (userData: UserData | null, isAdmin = false)
   }
 };
 
-// Cache the session result to avoid excessive reads
-let cachedSession: { user: UserData | null; isAdmin: boolean; timestamp: number } | null = null;
+// Cache for session information to avoid excessive localStorage reads
+let cachedSession: StoredUser | null = null;
 
 /**
  * Get user session data from localStorage
  * Returns null if no valid session exists or if session has expired
  * Uses a cache to reduce localStorage reads
  */
-export const getSessionFromStorage = (): { user: UserData | null; isAdmin: boolean } => {
+export function getSessionFromStorage(): { user: UserData | null; isAdmin: boolean } {
   if (typeof window === 'undefined') {
     return { user: null, isAdmin: false };
   }
-  
+
   try {
     // Use cached value if available and recent (less than 1 second old)
     if (cachedSession && Date.now() - cachedSession.timestamp < 1000) {
@@ -102,15 +159,21 @@ export const getSessionFromStorage = (): { user: UserData | null; isAdmin: boole
     if (now - authTimestamp > fourHours) {
       // Auth data is too old, clear it
       console.log('[SessionUtils] Session expired, clearing');
-      localStorage.removeItem(STORAGE_KEYS.USER);
-      localStorage.removeItem(STORAGE_KEYS.AUTH_TIME);
-      localStorage.removeItem(STORAGE_KEYS.IS_ADMIN);
+      clearSessionStorage();
       
       cachedSession = { user: null, isAdmin: false, timestamp: Date.now() };
       return { user: null, isAdmin: false };
     }
     
     const user = JSON.parse(storedUser) as UserData;
+    
+    // Validate the user has a valid ID
+    if (!isValidUser(user)) {
+      console.error('[SessionUtils] Retrieved user with invalid ID, removing from storage');
+      clearSessionStorage();
+      cachedSession = { user: null, isAdmin: false, timestamp: Date.now() };
+      return { user: null, isAdmin: false };
+    }
     
     // Only log if we haven't logged recently
     if (!cachedSession || cachedSession.user?.email !== user.email) {
@@ -122,9 +185,10 @@ export const getSessionFromStorage = (): { user: UserData | null; isAdmin: boole
     return { user, isAdmin: storedIsAdmin };
   } catch (error) {
     console.error('[SessionUtils] Error reading session:', error);
+    clearSessionStorage();
     return { user: null, isAdmin: false };
   }
-};
+}
 
 /**
  * Check if the current user is an admin based on stored session

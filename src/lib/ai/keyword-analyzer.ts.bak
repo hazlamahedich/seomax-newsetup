@@ -208,13 +208,24 @@ export class KeywordAnalyzer {
         4. Keyword clustering opportunities
         5. Competition level assessment
         
-        Format your response as a detailed JSON object that matches exactly this structure:
-        - mainKeyword: the main keyword string
-        - relatedKeywords: array of objects with properties [keyword, searchVolume, difficulty, intent]
-        - contentIdeas: array of objects with properties [title, format, topicRelevance]
-        - keywordClusters: array of objects with properties [clusterName, keywords array]
-        - competitionAnalysis: string with brief analysis
-        - recommendedStrategy: string with strategic recommendations
+        Format your response as a JSON object with the following structure:
+        {
+          "mainKeyword": "the main keyword",
+          "relatedKeywords": [
+            {"keyword": "related keyword 1", "searchVolume": "estimated monthly searches", "difficulty": "low/medium/high", "intent": "informational/transactional/navigational"},
+            {"keyword": "related keyword 2", "searchVolume": "estimated monthly searches", "difficulty": "low/medium/high", "intent": "informational/transactional/navigational"}
+          ],
+          "contentIdeas": [
+            {"title": "Potential content title 1", "format": "blog/guide/comparison", "topicRelevance": "high/medium/low"},
+            {"title": "Potential content title 2", "format": "blog/guide/comparison", "topicRelevance": "high/medium/low"}
+          ],
+          "keywordClusters": [
+            {"clusterName": "Cluster 1 name", "keywords": ["keyword1", "keyword2", "keyword3"]},
+            {"clusterName": "Cluster 2 name", "keywords": ["keyword4", "keyword5", "keyword6"]}
+          ],
+          "competitionAnalysis": "Brief analysis of competition level and difficulty",
+          "recommendedStrategy": "Strategic recommendations for targeting these keywords"
+        }
       `);
       
       // Create the chain
@@ -291,11 +302,23 @@ export class KeywordAnalyzer {
         3. Content gaps and opportunities
         4. Recommended approach for targeting these keywords
         
-        Format your response as a detailed JSON object that matches exactly this structure:
-        - keywords: array of keyword strings
-        - competitionAnalysis: object with properties [overallDifficulty, keywordDifficulties array, topCompetitors array]
-        - contentGaps: array of objects with properties [topic, opportunity, suggestedAngle]
-        - keywordTargetingStrategy: string with overall strategy
+        Format your response as a JSON object with the following structure:
+        {
+          "keywords": ["keyword1", "keyword2", "..."],
+          "competitionAnalysis": {
+            "overallDifficulty": "low/medium/high",
+            "keywordDifficulties": [
+              {"keyword": "keyword1", "difficulty": "score 1-100", "explanation": "Why this difficulty score"}
+            ],
+            "topCompetitors": [
+              {"domain": "competitor.com", "strengths": "What makes them rank well", "weaknesses": "Where they fall short"}
+            ]
+          },
+          "contentGaps": [
+            {"topic": "Underserved topic", "opportunity": "Why this is an opportunity", "suggestedAngle": "How to approach it"}
+          ],
+          "keywordTargetingStrategy": "Overall recommended strategy for targeting these keywords"
+        }
       `);
       
       // Create the chain
@@ -372,15 +395,28 @@ export class KeywordAnalyzer {
         Provide insights on:
         1. Growth direction (rising, stable, declining)
         2. Seasonal patterns if any
-        3. Future potential for this keyword
-        4. Related keywords that are trending
+        3. Emerging related terms
+        4. Future potential of this keyword
         
-        Format your response as a detailed JSON object that matches exactly this structure:
-        - keyword: the analyzed keyword string
-        - trendAnalysis: object with properties [growthDirection, growthRate, seasonality object]
-        - relatedEmergingTerms: array of objects with properties [term, growthRate, relevance]
-        - futurePotential: string assessment of potential
-        - recommendedAction: string with strategic recommendations
+        Format your response as a JSON object with the following structure:
+        {
+          "keyword": "the analyzed keyword",
+          "trendAnalysis": {
+            "growthDirection": "rising/stable/declining",
+            "growthRate": "percentage or qualitative assessment",
+            "seasonality": {
+              "hasSeasonal": true/false,
+              "peakMonths": ["month1", "month2"],
+              "lowMonths": ["month3", "month4"]
+            }
+          },
+          "relatedEmergingTerms": [
+            {"term": "emerging term 1", "growthRate": "fast/medium/slow", "relevance": "high/medium/low"},
+            {"term": "emerging term 2", "growthRate": "fast/medium/slow", "relevance": "high/medium/low"}
+          ],
+          "futurePotential": "Assessment of future viability and potential",
+          "recommendedAction": "Whether to invest in this keyword or not and why"
+        }
       `);
       
       // Create the chain

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/client';
 import { LLMModelRepository } from '@/lib/ai/models/repository';
-import { createSupabaseClient } from '@/lib/supabase/client';
 
 // Add headers function for enabling CORS
 const addCorsHeaders = (response: NextResponse) => {
