@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { ReloadIcon, ArrowRightIcon, CheckCircleIcon, ChevronRightIcon } from '@radix-ui/react-icons';
+import { ReloadIcon, ArrowRightIcon, CheckCircledIcon, ChevronRightIcon } from '@radix-ui/react-icons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -364,10 +364,20 @@ interface RewriteResultViewProps {
 }
 
 const RewriteResultView = ({ result }: RewriteResultViewProps) => {
+  const { toast } = useToast();
   const readabilityColor = 
     result.readability_score >= 80 ? "text-green-600" :
     result.readability_score >= 60 ? "text-yellow-600" :
     "text-red-600";
+  
+  // Function to copy the result to clipboard
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(result.rewritten_content);
+    toast({
+      title: "Copied to clipboard",
+      description: "The rewritten content has been copied to your clipboard.",
+    });
+  };
   
   return (
     <div className="grid gap-6">
@@ -433,7 +443,7 @@ const RewriteResultView = ({ result }: RewriteResultViewProps) => {
                       <span className="text-sm font-medium">{data.after}</span>
                     </div>
                     {data.after > data.before ? (
-                      <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                      <CheckCircledIcon className="h-4 w-4 text-green-500" />
                     ) : null}
                   </div>
                 </div>
@@ -448,14 +458,7 @@ const RewriteResultView = ({ result }: RewriteResultViewProps) => {
           Print Content
         </Button>
         <Button 
-          onClick={() => {
-            navigator.clipboard.writeText(result.rewritten_content);
-            toast({
-              title: 'Copied to clipboard',
-              description: 'The rewritten content has been copied to your clipboard.',
-              variant: 'default',
-            });
-          }}
+          onClick={copyToClipboard}
         >
           Copy to Clipboard
         </Button>

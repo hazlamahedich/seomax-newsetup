@@ -8,7 +8,7 @@ import {
   CompetitorContent
 } from '@/lib/types/database.types';
 
-// Define table types for type safety
+// Interface definitions for database tables
 export interface ContentPageTable {
   id: string;
   project_id: string;
@@ -18,31 +18,27 @@ export interface ContentPageTable {
   word_count: number | null;
   readability_score: number | null;
   seo_score: number | null;
-  status: 'not-analyzed' | 'analyzing' | 'analyzed' | 'optimized';
-  last_analyzed_at: string | null;
-  content_score: number | null;
+  analyzed_at: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 export interface ContentAnalysisTable {
   id: string;
-  content_page_id: string;
-  readability_analysis: Record<string, any> | null;
-  keyword_analysis: Record<string, any> | null;
-  structure_analysis: Record<string, any> | null;
-  overall_score: number;
+  page_id: string;
+  analysis_type: string;
+  result: Record<string, any>;
   created_at: string;
 }
 
 export interface ContentSuggestionTable {
   id: string;
-  content_analysis_id: string;
-  type: string;
-  suggestion: string;
+  page_id: string;
+  suggestion_type: string;
+  original_text: string;
+  suggested_text: string;
+  reason: string;
   implemented: boolean;
   created_at: string;
-  updated_at: string;
 }
 
 export interface TopicClusterTable {
@@ -177,61 +173,32 @@ export const ContentPageService = {
   },
 
   async analyzeContentPage(id: string) {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-    );
-    
-    // Set status to analyzing
-    await supabase
-      .from('content_pages')
-      .update({ status: 'analyzing' })
-      .eq('id', id);
-
-    // Get the content page to analyze
-    const { data: contentPage, error } = await supabase
-      .from('content_pages')
-      .select('*')
-      .eq('id', id)
-      .single();
-      
-    if (error || !contentPage) {
-      console.error('Error fetching content page for analysis:', error);
-      return false;
-    }
-    
+    console.log(`Starting content analysis for page ID: ${id}`);
     try {
-      // Call the new content analysis API
-      const response = await fetch('/api/analyze/content', {
+      // Call the direct content-analysis API with skipAuth=true
+      const response = await fetch('/api/content-analysis', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contentId: id,
-          content: contentPage.content,
-          title: contentPage.title,
-          targetKeywords: contentPage.target_keywords || [],
+          contentPageId: id,
+          skipAuth: true,
+          action: "analyze"
         }),
       });
       
       if (!response.ok) {
-        throw new Error('Content analysis failed');
+        const errorData = await response.json();
+        console.error('Content analysis API error:', errorData);
+        throw new Error(errorData.error || 'Content analysis failed');
       }
       
+      const data = await response.json();
+      console.log('Content analysis completed successfully:', data.success);
       return true;
     } catch (err) {
       console.error('Error analyzing content:', err);
-      
-      // Update status to reflect failure
-      await supabase
-        .from('content_pages')
-        .update({ 
-          status: 'not-analyzed',
-          last_analyzed_at: new Date().toISOString()
-        })
-        .eq('id', id);
-        
       return false;
     }
   },
@@ -260,61 +227,28 @@ export const ContentPageService = {
     }
   },
 
-  async getContentPageWithAnalysis(id: string) {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-    );
-    
-    // Get the content page
-    const { data: contentPage, error: contentError } = await supabase
-      .from('content_pages')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
-    if (contentError) {
-      console.error('Error fetching content page:', contentError);
-      throw contentError;
-    }
-    
-    // Get the latest content analysis
-    const { data: contentAnalyses, error: analysisError } = await supabase
-      .from('content_analysis')
-      .select('*')
-      .eq('content_page_id', id)
-      .order('created_at', { ascending: false })
-      .limit(1);
+  async getContentPageWithAnalysis(contentPageId: string) {
+    try {
+      console.log(`Fetching content and analysis via API for contentPageId: ${contentPageId}`);
+      const response = await fetch(`/api/content-analysis?contentPageId=${contentPageId}&skipAuth=true`);
       
-    if (analysisError) {
-      console.error('Error fetching content analysis:', analysisError);
-      throw analysisError;
-    }
-    
-    // Get content suggestions for the latest analysis
-    const latestAnalysis = contentAnalyses?.[0];
-    let suggestions = [];
-    
-    if (latestAnalysis) {
-      const { data: contentSuggestions, error: suggestionsError } = await supabase
-        .from('content_suggestions')
-        .select('*')
-        .eq('content_analysis_id', latestAnalysis.id)
-        .order('created_at', { ascending: false });
-        
-      if (suggestionsError) {
-        console.error('Error fetching content suggestions:', suggestionsError);
-        throw suggestionsError;
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error response from content-analysis API:', errorData);
+        throw new Error(errorData.error || 'Failed to fetch content data');
       }
       
-      suggestions = contentSuggestions || [];
+      const data = await response.json();
+      console.log('API response for content and analysis:', data);
+      
+      return {
+        page: data.contentPage,
+        analysis: data.analysis
+      };
+    } catch (error) {
+      console.error('Error fetching content page with analysis:', error);
+      throw error;
     }
-    
-    return {
-      page: contentPage,
-      analysis: latestAnalysis || null,
-      suggestions
-    };
   }
 };
 
@@ -328,7 +262,7 @@ export const ContentAnalysisService = {
     const { data, error } = await supabase
       .from('content_analysis')
       .select('*')
-      .eq('content_page_id', contentPageId)
+      .eq('page_id', contentPageId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -347,7 +281,7 @@ export const ContentAnalysisService = {
     const { data, error } = await supabase
       .from('content_analysis')
       .select('*')
-      .eq('content_page_id', contentPageId)
+      .eq('page_id', contentPageId)
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
@@ -393,9 +327,11 @@ export const ContentAnalysisService = {
     const { data: newSuggestions, error: suggestionsError } = await supabase
       .from('content_suggestions')
       .insert(suggestions.map(suggestion => ({
-        content_analysis_id: analysisId,
-        type: suggestion.type,
-        suggestion: suggestion.suggestion,
+        page_id: analysisId,
+        suggestion_type: suggestion.type,
+        original_text: suggestion.original || "",
+        suggested_text: suggestion.suggestion,
+        reason: suggestion.reason || "Improve content quality",
         implemented: false
       })))
       .select();
@@ -411,7 +347,7 @@ export const ContentAnalysisService = {
 
 // Content Suggestion Service
 export const ContentSuggestionService = {
-  async getSuggestions(analysisId: string) {
+  async getSuggestions(contentPageId: string) {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL || '',
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -419,7 +355,7 @@ export const ContentSuggestionService = {
     const { data, error } = await supabase
       .from('content_suggestions')
       .select('*')
-      .eq('content_analysis_id', analysisId)
+      .eq('page_id', contentPageId)
       .order('created_at', { ascending: false });
 
     if (error) {

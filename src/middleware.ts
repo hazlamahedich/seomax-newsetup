@@ -54,11 +54,32 @@ export async function middleware(req: NextRequest) {
     path === protectedPath || path.startsWith(`${protectedPath}/`)
   );
   
-  // Get the user's session token
-  const token = await getToken({ 
-    req, 
-    secret: process.env.NEXTAUTH_SECRET
-  });
+  // Validate NEXTAUTH_SECRET before proceeding
+  if (!process.env.NEXTAUTH_SECRET) {
+    console.error('NEXTAUTH_SECRET is not set in environment variables');
+    return NextResponse.json(
+      { error: 'Server configuration error' },
+      { status: 500 }
+    );
+  }
+
+  // Get the user's session token with error handling
+  let token;
+  try {
+    token = await getToken({
+      req,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: process.env.NODE_ENV === 'production'
+    });
+  } catch (error) {
+    console.error('Error getting session token:', error);
+    if (isProtectedPath) {
+      const url = new URL('/login', req.url);
+      url.searchParams.set('error', 'SessionError');
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
   
   // If there is no session token and the path is protected, redirect to the login page
   if (!token && isProtectedPath) {

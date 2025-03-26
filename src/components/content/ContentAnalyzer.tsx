@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ContentPageService } from '@/lib/services/content-service';
 import { toast } from '@/components/ui/use-toast';
+import { ContentAnalysisPdfButton } from './ContentAnalysisPdfButton';
 
 interface ContentAnalyzerProps {
   contentPageId: string;
@@ -32,10 +33,40 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
     setIsLoading(true);
     setError(null);
     try {
+      console.log(`Loading content and analysis for contentId: ${contentPageId}`);
       // Load content page data with analysis
       const data = await ContentPageService.getContentPageWithAnalysis(contentPageId);
+      console.log('Content page data received:', data.page);
+      console.log('Analysis data received:', data.analysis);
+      
       setContentPage(data.page);
       setAnalysis(data.analysis);
+      
+      if (data.analysis) {
+        console.log('Analysis structure:', {
+          keys: Object.keys(data.analysis),
+          hasResult: Boolean(data.analysis.result),
+          resultKeys: data.analysis.result ? Object.keys(data.analysis.result) : null
+        });
+        
+        if (data.analysis.result) {
+          // Log details about the nested analysis structure
+          const { result } = data.analysis;
+          console.log('Result contains readability_analysis:', Boolean(result.readability_analysis));
+          console.log('Result contains keyword_analysis:', Boolean(result.keyword_analysis));
+          console.log('Result contains structure_analysis:', Boolean(result.structure_analysis));
+          
+          if (result.readability_analysis) {
+            console.log('Readability analysis keys:', Object.keys(result.readability_analysis));
+          }
+          
+          if (result.keyword_analysis) {
+            console.log('Keyword analysis keys:', Object.keys(result.keyword_analysis));
+          }
+        }
+      } else {
+        console.log('No analysis data received');
+      }
     } catch (err) {
       setError('Failed to load content data');
       console.error('Error loading content:', err);
@@ -65,6 +96,63 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
       });
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // Add debug function
+  const fetchDebugInfo = async () => {
+    try {
+      console.log("Fetching debug info for content page:", contentPageId);
+      const response = await fetch(`/api/debug/content-analysis?contentPageId=${contentPageId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Debug API error:", errorData);
+        toast({
+          title: "Debug Error",
+          description: errorData.error || "Failed to fetch debug information",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const debugData = await response.json();
+      console.log("Debug API Response:", debugData);
+      
+      // Display debug information in a more readable format
+      console.group("Content Analysis Debug Information");
+      console.log("Content Page Data:", debugData.debugInfo.contentPage);
+      console.log("Analysis Data:", debugData.debugInfo.analysisData);
+      
+      if (debugData.debugInfo.analysisDataStructure) {
+        console.log("Analysis Structure:", debugData.debugInfo.analysisDataStructure);
+        console.log("Raw Analysis Result:", debugData.debugInfo.rawAnalysisResult);
+        
+        console.group("Analysis Component Keys");
+        if (debugData.debugInfo.analysisDataStructure.hasReadabilityAnalysis) {
+          console.log("Readability Analysis Keys:", debugData.debugInfo.analysisDataStructure.readabilityAnalysisKeys);
+        }
+        if (debugData.debugInfo.analysisDataStructure.hasKeywordAnalysis) {
+          console.log("Keyword Analysis Keys:", debugData.debugInfo.analysisDataStructure.keywordAnalysisKeys);
+        }
+        if (debugData.debugInfo.analysisDataStructure.hasStructureAnalysis) {
+          console.log("Structure Analysis Keys:", debugData.debugInfo.analysisDataStructure.structureAnalysisKeys);
+        }
+        console.groupEnd();
+      }
+      console.groupEnd();
+      
+      toast({
+        title: "Debug Information",
+        description: "Debug data has been logged to the console",
+      });
+    } catch (error) {
+      console.error("Error fetching debug information:", error);
+      toast({
+        title: "Debug Error",
+        description: "Failed to fetch debug information",
+        variant: "destructive",
+      });
     }
   };
 
@@ -197,11 +285,23 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
   };
 
   const renderReadabilityAnalysis = () => {
-    if (!analysis?.readability_analysis) {
-      return <p>No readability analysis available.</p>;
+    console.log('Rendering readability analysis...');
+    console.log('Analysis object:', analysis);
+    
+    if (!analysis) {
+      console.log('No analysis object available');
+      return <p>No analysis available. Please analyze the content first.</p>;
     }
-
-    const readability = analysis.readability_analysis;
+    
+    console.log('Analysis structure:', Object.keys(analysis));
+    
+    if (!analysis.readability) {
+      console.log('No readability data in analysis');
+      return <p>No readability analysis available. The analysis may be incomplete.</p>;
+    }
+    
+    const readability = analysis.readability;
+    console.log('Readability analysis data:', readability);
     
     return (
       <>
@@ -221,19 +321,19 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm font-medium mb-1">Reading Level</p>
-                <p className="text-muted-foreground">{readability.reading_level}</p>
+                <p className="text-muted-foreground">{readability.reading_level || 'Not analyzed'}</p>
               </div>
               <div>
                 <p className="text-sm font-medium mb-1">Sentence Complexity</p>
-                <p className="text-muted-foreground">{readability.sentence_complexity}</p>
+                <p className="text-muted-foreground">{readability.sentence_complexity_score || readability.sentence_complexity || 'Not analyzed'}/100</p>
               </div>
               <div>
                 <p className="text-sm font-medium mb-1">Vocabulary Level</p>
-                <p className="text-muted-foreground">{readability.vocabulary_level}</p>
+                <p className="text-muted-foreground">{readability.vocabulary_score || readability.vocabulary_level || 'Not analyzed'}/100</p>
               </div>
               <div>
                 <p className="text-sm font-medium mb-1">Passive Voice Usage</p>
-                <p className="text-muted-foreground">{readability.passive_voice_percentage}%</p>
+                <p className="text-muted-foreground">{readability.passive_voice_percentage || 'Not analyzed'}%</p>
               </div>
             </div>
             
@@ -242,17 +342,27 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
             <div>
               <h4 className="text-sm font-medium mb-2">Improvement Areas</h4>
               <ul className="space-y-2">
-                {readability.improvement_areas.map((area: string, index: number) => (
+                {readability.recommendations && readability.recommendations.map((recommendation: string, index: number) => (
+                  <li key={index} className="text-sm text-muted-foreground flex items-start">
+                    <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
+                    {recommendation}
+                  </li>
+                ))}
+                {readability.improvement_areas && readability.improvement_areas.map((area: string, index: number) => (
                   <li key={index} className="text-sm text-muted-foreground flex items-start">
                     <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
                     {area}
                   </li>
                 ))}
+                {(!readability.recommendations || readability.recommendations.length === 0) && 
+                 (!readability.improvement_areas || readability.improvement_areas.length === 0) && (
+                  <li className="text-sm text-muted-foreground">No improvement areas identified.</li>
+                )}
               </ul>
             </div>
           </CardContent>
           <CardFooter>
-            <p className="text-sm text-muted-foreground">{readability.analysis_summary}</p>
+            <p className="text-sm text-muted-foreground">{readability.analysis_summary || 'No summary available'}</p>
           </CardFooter>
         </Card>
       </>
@@ -260,11 +370,23 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
   };
 
   const renderKeywordAnalysis = () => {
-    if (!analysis?.keyword_analysis) {
-      return <p>No keyword analysis available.</p>;
+    console.log('Rendering keyword analysis...');
+    console.log('Analysis object:', analysis);
+    
+    if (!analysis) {
+      console.log('No analysis object available');
+      return <p>No analysis available. Please analyze the content first.</p>;
     }
-
-    const keywordAnalysis = analysis.keyword_analysis;
+    
+    console.log('Analysis structure:', Object.keys(analysis));
+    
+    if (!analysis.keyword) {
+      console.log('No keyword data in analysis');
+      return <p>No keyword analysis available. The analysis may be incomplete.</p>;
+    }
+    
+    const keywordAnalysis = analysis.keyword;
+    console.log('Keyword analysis data:', keywordAnalysis);
     
     return (
       <>
@@ -281,15 +403,31 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium mb-1">Optimization Score</p>
+                <p className="text-muted-foreground">{keywordAnalysis.optimization_score || 0}/100</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-1">Natural Usage</p>
+                <p className="text-muted-foreground">{keywordAnalysis.natural_usage_score || 0}/100</p>
+              </div>
+            </div>
+            
+            <Separator />
+            
             <div>
               <h4 className="text-sm font-medium mb-2">Keyword Density</h4>
               <div className="space-y-2">
-                {Object.entries(keywordAnalysis.keyword_density).map(([keyword, density]: [string, any]) => (
+                {keywordAnalysis.keyword_density && Object.entries(keywordAnalysis.keyword_density).map(([keyword, density]: [string, any]) => (
                   <div key={keyword} className="flex items-center justify-between">
                     <p className="text-sm">{keyword}</p>
                     <Badge variant="outline">{density}%</Badge>
                   </div>
                 ))}
+                {(!keywordAnalysis.keyword_density || Object.keys(keywordAnalysis.keyword_density).length === 0) && (
+                  <p className="text-sm text-muted-foreground">No keyword density data available.</p>
+                )}
               </div>
             </div>
             
@@ -298,7 +436,7 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
             <div>
               <h4 className="text-sm font-medium mb-2">Keyword Placement</h4>
               <div className="grid grid-cols-3 gap-2">
-                {Object.entries(keywordAnalysis.keyword_placement).map(([location, present]: [string, any]) => (
+                {keywordAnalysis.keyword_placement && Object.entries(keywordAnalysis.keyword_placement).map(([location, present]: [string, any]) => (
                   <div key={location} className="flex items-center">
                     {present ? (
                       <Check className="h-4 w-4 mr-2 text-green-500" />
@@ -308,6 +446,9 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
                     <p className="text-sm capitalize">{location}</p>
                   </div>
                 ))}
+                {(!keywordAnalysis.keyword_placement || Object.keys(keywordAnalysis.keyword_placement).length === 0) && (
+                  <p className="text-sm text-muted-foreground">No keyword placement data available.</p>
+                )}
               </div>
             </div>
             
@@ -316,9 +457,12 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
             <div>
               <h4 className="text-sm font-medium mb-2">Related Keywords</h4>
               <div className="flex flex-wrap gap-2">
-                {keywordAnalysis.related_keywords.map((keyword: string, index: number) => (
+                {keywordAnalysis.related_keywords && keywordAnalysis.related_keywords.map((keyword: string, index: number) => (
                   <Badge key={index} variant="secondary">{keyword}</Badge>
                 ))}
+                {(!keywordAnalysis.related_keywords || keywordAnalysis.related_keywords.length === 0) && (
+                  <p className="text-sm text-muted-foreground">No related keywords available.</p>
+                )}
               </div>
             </div>
             
@@ -327,17 +471,28 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
             <div>
               <h4 className="text-sm font-medium mb-2">Recommendations</h4>
               <ul className="space-y-2">
-                {keywordAnalysis.recommendations.map((recommendation: string, index: number) => (
+                {keywordAnalysis.recommendations && keywordAnalysis.recommendations.map((recommendation: string, index: number) => (
                   <li key={index} className="text-sm text-muted-foreground flex items-start">
                     <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
                     {recommendation}
                   </li>
                 ))}
+                {(!keywordAnalysis.recommendations || keywordAnalysis.recommendations.length === 0) && 
+                 keywordAnalysis.improvement_areas && keywordAnalysis.improvement_areas.map((area: string, index: number) => (
+                  <li key={index} className="text-sm text-muted-foreground flex items-start">
+                    <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
+                    {area}
+                  </li>
+                ))}
+                {(!keywordAnalysis.recommendations || keywordAnalysis.recommendations.length === 0) && 
+                 (!keywordAnalysis.improvement_areas || keywordAnalysis.improvement_areas.length === 0) && (
+                  <li className="text-sm text-muted-foreground">No recommendations available.</li>
+                )}
               </ul>
             </div>
           </CardContent>
           <CardFooter>
-            <p className="text-sm text-muted-foreground">{keywordAnalysis.analysis_summary}</p>
+            <p className="text-sm text-muted-foreground">{keywordAnalysis.analysis_summary || 'No summary available'}</p>
           </CardFooter>
         </Card>
       </>
@@ -345,11 +500,20 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
   };
 
   const renderStructureAnalysis = () => {
-    if (!analysis?.structure_analysis) {
-      return <p>No structure analysis available.</p>;
+    console.log('Rendering structure analysis...');
+    
+    if (!analysis) {
+      console.log('No analysis object available');
+      return <p>No analysis available. Please analyze the content first.</p>;
     }
-
-    const structureAnalysis = analysis.structure_analysis;
+    
+    if (!analysis.structure) {
+      console.log('No structure data in analysis');
+      return <p>No structure analysis available. The analysis may be incomplete.</p>;
+    }
+    
+    const structureAnalysis = analysis.structure;
+    console.log('Structure analysis data:', structureAnalysis);
     
     return (
       <>
@@ -368,20 +532,20 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm font-medium mb-1">Headings Used</p>
-                <p className="text-muted-foreground">{structureAnalysis.heading_count}</p>
+                <p className="text-sm font-medium mb-1">Formatting Score</p>
+                <p className="text-muted-foreground">{structureAnalysis.formatting_score || 0}/100</p>
               </div>
               <div>
-                <p className="text-sm font-medium mb-1">Paragraph Count</p>
-                <p className="text-muted-foreground">{structureAnalysis.paragraph_count}</p>
+                <p className="text-sm font-medium mb-1">Organization Score</p>
+                <p className="text-muted-foreground">{structureAnalysis.organization_score || 0}/100</p>
               </div>
               <div>
-                <p className="text-sm font-medium mb-1">Avg. Paragraph Length</p>
-                <p className="text-muted-foreground">{structureAnalysis.avg_paragraph_length} words</p>
+                <p className="text-sm font-medium mb-1">Intro/Conclusion</p>
+                <p className="text-muted-foreground">{structureAnalysis.intro_conclusion_score || 0}/100</p>
               </div>
               <div>
-                <p className="text-sm font-medium mb-1">List Elements</p>
-                <p className="text-muted-foreground">{structureAnalysis.list_count || 0}</p>
+                <p className="text-sm font-medium mb-1">Structure Score</p>
+                <p className="text-muted-foreground">{structureAnalysis.structure_score || 0}/100</p>
               </div>
             </div>
             
@@ -389,32 +553,80 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
             
             <div>
               <h4 className="text-sm font-medium mb-2">Heading Structure</h4>
-              <div className="space-y-2">
-                {structureAnalysis.heading_structure.map((heading: any, index: number) => (
-                  <div key={index} className="flex items-start">
-                    <Badge variant="outline" className="mr-2 mt-0.5">{heading.level}</Badge>
-                    <p className="text-sm">{heading.text}</p>
-                  </div>
-                ))}
+              <div className="grid grid-cols-3 gap-2">
+                {structureAnalysis.heading_hierarchy && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm uppercase font-mono">H1</p>
+                      <Badge variant="outline">{structureAnalysis.heading_hierarchy.h1_count || 0}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm uppercase font-mono">H2</p>
+                      <Badge variant="outline">{structureAnalysis.heading_hierarchy.h2_count || 0}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm uppercase font-mono">H3</p>
+                      <Badge variant="outline">{structureAnalysis.heading_hierarchy.h3_count || 0}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between col-span-3">
+                      <p className="text-sm">Correct Hierarchy</p>
+                      {structureAnalysis.heading_hierarchy.hierarchy_correct ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 text-amber-500" />
+                      )}
+                    </div>
+                  </>
+                )}
+                {!structureAnalysis.heading_hierarchy && (
+                  <p className="text-sm text-muted-foreground col-span-3">No heading structure data available.</p>
+                )}
               </div>
             </div>
             
             <Separator />
             
+            {structureAnalysis.content_gaps && structureAnalysis.content_gaps.length > 0 && (
+              <>
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Content Gaps</h4>
+                  <ul className="space-y-2">
+                    {structureAnalysis.content_gaps.map((gap: string, index: number) => (
+                      <li key={index} className="text-sm text-muted-foreground flex items-start">
+                        <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
+                        {gap}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <Separator />
+              </>
+            )}
+            
             <div>
-              <h4 className="text-sm font-medium mb-2">Structure Improvements</h4>
+              <h4 className="text-sm font-medium mb-2">Improvement Areas</h4>
               <ul className="space-y-2">
-                {structureAnalysis.improvements.map((improvement: string, index: number) => (
+                {structureAnalysis.recommendations && structureAnalysis.recommendations.map((recommendation: string, index: number) => (
                   <li key={index} className="text-sm text-muted-foreground flex items-start">
                     <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
-                    {improvement}
+                    {recommendation}
                   </li>
                 ))}
+                {structureAnalysis.improvement_areas && structureAnalysis.improvement_areas.map((area: string, index: number) => (
+                  <li key={index} className="text-sm text-muted-foreground flex items-start">
+                    <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
+                    {area}
+                  </li>
+                ))}
+                {(!structureAnalysis.recommendations || structureAnalysis.recommendations.length === 0) && 
+                 (!structureAnalysis.improvement_areas || structureAnalysis.improvement_areas.length === 0) && (
+                  <li className="text-sm text-muted-foreground">No improvement areas identified.</li>
+                )}
               </ul>
             </div>
           </CardContent>
           <CardFooter>
-            <p className="text-sm text-muted-foreground">{structureAnalysis.analysis_summary}</p>
+            <p className="text-sm text-muted-foreground">{structureAnalysis.analysis_summary || 'No summary available'}</p>
           </CardFooter>
         </Card>
       </>
@@ -489,7 +701,7 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
                         </tr>
                       </thead>
                       <tbody>
-                        {imageAnalysis.imgSrcAnalysis.map((img, index) => (
+                        {imageAnalysis.imgSrcAnalysis.map((img: any, index: number) => (
                           <tr key={index} className="border-b">
                             <td className="py-2">
                               <div className="w-16 h-16 bg-gray-100 flex items-center justify-center rounded overflow-hidden">
@@ -516,9 +728,9 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
                             <td className="py-2">
                               {img.hasAlt ? (
                                 img.isDescriptive ? (
-                                  <Badge variant="success">Good</Badge>
+                                  <Badge variant="default">Good</Badge>
                                 ) : (
-                                  <Badge variant="warning">Improve</Badge>
+                                  <Badge variant="secondary">Improve</Badge>
                                 )
                               ) : (
                                 <Badge variant="destructive">Missing</Badge>
@@ -538,7 +750,7 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
             <div>
               <h4 className="text-sm font-medium mb-2">Improvement Areas</h4>
               <ul className="space-y-2">
-                {imageAnalysis.improvementSuggestions.map((suggestion, index) => (
+                {imageAnalysis.improvementSuggestions.map((suggestion: string, index: number) => (
                   <li key={index} className="text-sm text-muted-foreground flex items-start">
                     <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
                     {suggestion}
@@ -620,7 +832,7 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
                         </tr>
                       </thead>
                       <tbody>
-                        {linkingAnalysis.linkedPages.map((link, index) => (
+                        {linkingAnalysis.linkedPages.map((link: any, index: number) => (
                           <tr key={index} className="border-b">
                             <td className="py-2 truncate max-w-[200px]">{link.url}</td>
                             <td className="py-2">{link.type}</td>
@@ -639,12 +851,15 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
             <div>
               <h4 className="text-sm font-medium mb-2">Improvement Areas</h4>
               <ul className="space-y-2">
-                {linkingAnalysis.improvementSuggestions.map((suggestion, index) => (
+                {linkingAnalysis.improvementSuggestions && linkingAnalysis.improvementSuggestions.map((suggestion: string, index: number) => (
                   <li key={index} className="text-sm text-muted-foreground flex items-start">
                     <AlertCircle className="h-4 w-4 mr-2 mt-0.5 text-amber-500" />
                     {suggestion}
                   </li>
                 ))}
+                {(!linkingAnalysis.improvementSuggestions || linkingAnalysis.improvementSuggestions.length === 0) && (
+                  <li className="text-sm text-muted-foreground">No improvement areas identified.</li>
+                )}
               </ul>
             </div>
           </CardContent>
@@ -663,20 +878,37 @@ export function ContentAnalyzer({ contentPageId, onBack }: ContentAnalyzerProps)
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{contentPage.title || 'Untitled Page'}</h1>
+          <h1 className="text-2xl font-bold">{contentPage?.title || 'Untitled Page'}</h1>
           <p className="text-muted-foreground text-sm">
-            {contentPage.url}
+            {contentPage?.url}
           </p>
         </div>
         
         <div className="flex items-center space-x-2">
-          {!needsAnalysis && (
-            <Button 
+          {!needsAnalysis && analysis && (
+            <ContentAnalysisPdfButton
+              contentPageId={contentPageId}
+              contentPage={contentPage}
+              analysis={analysis}
               variant="outline"
               size="sm"
+            />
+          )}
+          
+          <Button 
+            variant="outline" 
+            onClick={fetchDebugInfo}
+            size="sm"
+          >
+            Debug
+          </Button>
+          
+          {!needsAnalysis && (
+            <Button 
               onClick={handleAnalyzeContent}
               disabled={isAnalyzing}
               className="flex items-center"
+              size="sm"
             >
               {isAnalyzing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

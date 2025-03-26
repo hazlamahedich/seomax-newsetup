@@ -1,45 +1,107 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { AlertCircle, Loader2, Check, Info } from "lucide-react";
+import { AlertCircle, Loader2, Check, Info, CheckCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ContentStructureAnalysisProps {
   contentPageId: string;
+  title: string;
+  url: string;
+  analyzed: boolean;
 }
 
-export function ContentStructureAnalysis({ contentPageId }: ContentStructureAnalysisProps) {
+export default function ContentStructureAnalysis({ contentPageId, title, url, analyzed }: ContentStructureAnalysisProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [analysis, setAnalysis] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [contentNotFound, setContentNotFound] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [success, setSuccess] = useState<boolean>(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     async function fetchAnalysis() {
       try {
         setIsLoading(true);
-        const response = await fetch(`/api/analyze/content?contentId=${contentPageId}`);
+        const response = await fetch(`/api/content-analysis?contentPageId=${contentPageId}&skipAuth=true`);
         
         if (!response.ok) {
-          throw new Error("Failed to fetch analysis data");
+          throw new Error(`Failed to fetch analysis: ${response.status}`);
         }
         
         const data = await response.json();
-        setAnalysis(data.analysis);
-        setError(null);
-      } catch (err) {
-        console.error("Error fetching structure analysis:", err);
-        setError("Failed to load structure analysis");
+        setAnalysis(data);
+        setContentNotFound(false);
+      } catch (error) {
+        console.error('Error fetching analysis:', error);
+        setError((error as Error).message);
+        setContentNotFound(true);
       } finally {
         setIsLoading(false);
       }
     }
     
-    fetchAnalysis();
+    if (contentPageId) {
+      fetchAnalysis();
+    }
   }, [contentPageId]);
+
+  const handleAnalysis = async () => {
+    setIsAnalyzing(true);
+    setError(null);
+    setSuccess(false);
+    
+    try {
+      const response = await fetch('/api/content-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contentPageId,
+          skipAuth: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(true);
+        toast({
+          title: "Analysis Complete",
+          description: "Content analysis has been completed successfully.",
+          variant: "default",
+        });
+        
+        // Refresh the page after a short delay to show updated analysis
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      } else {
+        throw new Error(data.error || 'Unknown error during analysis');
+      }
+    } catch (err: any) {
+      setError(err.message || 'An unexpected error occurred during analysis');
+      toast({
+        title: "Analysis Failed",
+        description: err.message || 'Failed to complete content analysis',
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -61,6 +123,30 @@ export function ContentStructureAnalysis({ contentPageId }: ContentStructureAnal
     );
   }
 
+  if (contentNotFound) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Content Structure Analysis</CardTitle>
+          <CardDescription>
+            Analyze your content structure for better readability and SEO performance.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+          <AlertCircle className="h-10 w-10 text-amber-500 mb-4" />
+          <h3 className="text-xl font-semibold mb-2">Content Not Found</h3>
+          <p className="text-muted-foreground mb-4">
+            The content page you're trying to analyze doesn't exist or has been deleted.
+            Content ID: {contentPageId}
+          </p>
+          <Button onClick={() => window.location.href = '/dashboard/content'}>
+            Back to Content Pages
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (error) {
     return (
       <Card>
@@ -76,7 +162,12 @@ export function ContentStructureAnalysis({ contentPageId }: ContentStructureAnal
           <p className="text-muted-foreground mb-4">
             {error}
           </p>
-          <Button onClick={() => window.location.reload()}>Try Again</Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => window.location.href = '/dashboard/content'}>
+              Back to Content
+            </Button>
+            <Button onClick={() => window.location.reload()}>Try Again</Button>
+          </div>
         </CardContent>
       </Card>
     );
@@ -97,7 +188,7 @@ export function ContentStructureAnalysis({ contentPageId }: ContentStructureAnal
           <p className="text-muted-foreground mb-4">
             We haven't analyzed this content yet. Run a content analysis to get structure insights.
           </p>
-          <Button onClick={() => window.location.href = `/api/analyze/content?contentId=${contentPageId}`}>
+          <Button onClick={handleAnalysis}>
             Analyze Content
           </Button>
         </CardContent>
@@ -108,140 +199,55 @@ export function ContentStructureAnalysis({ contentPageId }: ContentStructureAnal
   const structureData = analysis.structure_analysis;
   
   return (
-    <Card>
+    <Card className="w-full">
       <CardHeader>
         <CardTitle>Content Structure Analysis</CardTitle>
         <CardDescription>
-          Detailed analysis of your content structure for better readability and SEO performance.
+          Analyze your content to get recommendations on improving its structure and SEO performance.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-background rounded-lg border p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-medium">Structure Score</h3>
-              <div className="flex items-center">
-                <span className="text-xl font-semibold mr-2">{structureData.structureScore}</span>
-                <Badge 
-                  className={`${
-                    structureData.structureScore >= 80 ? "bg-green-100 text-green-800" :
-                    structureData.structureScore >= 60 ? "bg-blue-100 text-blue-800" :
-                    "bg-amber-100 text-amber-800"
-                  }`}
-                >
-                  {structureData.structureScore >= 80 ? "Excellent" :
-                   structureData.structureScore >= 60 ? "Good" :
-                   "Needs Improvement"}
-                </Badge>
-              </div>
-            </div>
-            
-            <Progress 
-              value={structureData.structureScore} 
-              className="h-2 mb-4"
-              color={structureData.structureScore >= 80 ? "bg-green-500" :
-                     structureData.structureScore >= 60 ? "bg-blue-500" :
-                     "bg-amber-500"}
-            />
-            
-            <p className="text-sm text-muted-foreground mb-4">
-              Your content structure score is based on heading organization, paragraph length, 
-              content elements, and other factors that impact readability and SEO.
-            </p>
-            
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span>Paragraphs</span>
-                <span className="font-medium">{structureData.paragraphCount}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span>Avg. Paragraph Length</span>
-                <span className={`font-medium ${
-                  structureData.averageParagraphLength <= 3 ? "text-green-500" :
-                  structureData.averageParagraphLength <= 5 ? "text-blue-500" :
-                  "text-amber-500"
-                }`}>
-                  {structureData.averageParagraphLength} sentences
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span>Lists</span>
-                <span className="font-medium">{structureData.listCount}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span>Images</span>
-                <span className="font-medium">{structureData.imageCount}</span>
-              </div>
-            </div>
+      <CardContent>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">{title}</h3>
+            <p className="text-sm text-muted-foreground">{url}</p>
           </div>
-          
-          <div className="bg-background rounded-lg border p-4">
-            <h3 className="text-lg font-medium mb-3">Heading Structure</h3>
-            <div className="mb-4">
-              <Badge 
-                className={`${
-                  structureData.headingStructure === 'well-structured' ? "bg-green-100 text-green-800" :
-                  structureData.headingStructure === 'needs-improvement' ? "bg-amber-100 text-amber-800" :
-                  "bg-red-100 text-red-800"
-                }`}
-              >
-                {structureData.headingStructure === 'well-structured' ? 'Well Structured' :
-                 structureData.headingStructure === 'needs-improvement' ? 'Needs Improvement' :
-                 'Poor Structure'}
-              </Badge>
-              
-              <p className="text-sm text-muted-foreground mt-2">
-                {structureData.headingStructure === 'well-structured' ? 
-                  'Your headings follow a logical hierarchy, which is ideal for both readers and search engines.' :
-                  structureData.headingStructure === 'needs-improvement' ?
-                  'Your heading structure could be improved to follow a more logical hierarchy.' :
-                  'Your heading structure needs significant improvement. Use proper heading levels (H1-H6) in hierarchical order.'
-                }
-              </p>
-            </div>
-            
-            <Separator className="my-3" />
-            
-            <h3 className="text-md font-medium mb-2">Heading Distribution</h3>
-            <div className="space-y-2">
-              {Object.entries(structureData.headingCount || {}).map(([level, count]: [string, any]) => (
-                <div key={level} className="grid grid-cols-6 gap-2 items-center">
-                  <span className="col-span-1 font-medium">{level.toUpperCase()}</span>
-                  <div className="col-span-4 bg-muted rounded-full h-2 overflow-hidden">
-                    <div 
-                      className="bg-primary h-full rounded-full" 
-                      style={{ width: `${Math.min(count * 20, 100)}%` }}
-                    ></div>
-                  </div>
-                  <span className="col-span-1 text-right">{count}</span>
-                </div>
-              ))}
-              
-              {Object.keys(structureData.headingCount || {}).length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No headings detected in your content. Consider adding headings to improve structure.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
 
-        <div className="bg-background rounded-lg border p-4">
-          <h3 className="text-lg font-medium mb-3">Improvement Areas</h3>
-          {structureData.improvementAreas?.length > 0 ? (
-            <ul className="space-y-2">
-              {structureData.improvementAreas.map((area: string, index: number) => (
-                <li key={index} className="flex items-start">
-                  <Check className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>{area}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-muted-foreground">No specific improvement areas identified.</p>
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {success && (
+            <Alert variant="default" className="bg-green-50 border-green-200">
+              <CheckCircle className="h-4 w-4 text-green-500" />
+              <AlertTitle>Success</AlertTitle>
+              <AlertDescription>Analysis completed successfully. Refreshing page...</AlertDescription>
+            </Alert>
           )}
         </div>
       </CardContent>
+      <CardFooter>
+        <Button 
+          onClick={handleAnalysis} 
+          disabled={isAnalyzing}
+          className="w-full"
+        >
+          {isAnalyzing ? (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              Analyzing Content...
+            </>
+          ) : analyzed ? (
+            'Re-Analyze Content'
+          ) : (
+            'Analyze Content'
+          )}
+        </Button>
+      </CardFooter>
     </Card>
   );
 } 

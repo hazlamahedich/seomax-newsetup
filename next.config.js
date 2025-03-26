@@ -43,9 +43,9 @@ const nextConfig = {
     return config;
   },
   experimental: {
-    // turbo flag as boolean is deprecated, use object or remove it entirely
-    // turbo: process.env.DISABLE_TURBOPACK !== 'true',
-    serverActions: true,
+    serverActions: {
+      enabled: true
+    }
   }
 };
 

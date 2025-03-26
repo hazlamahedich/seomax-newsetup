@@ -4,72 +4,23 @@ import * as cheerio from 'cheerio';
 import { GradingSystemService } from './GradingSystemService';
 
 export interface TechnicalSEOIssue {
-  id: string;
+  type: string;
+  severity: 'critical' | 'warning' | 'info';
+  message: string;
   url: string;
-  type: 'robots' | 'sitemap' | 'ssl' | 'canonical' | 'http_status' | 'redirect' | 'hreflang' | 'structured_data' | 'crawlability' | 'mobile_friendly' | 'page_speed';
-  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
-  description: string;
-  recommendation: string;
-  details?: any;
-  affectedElement?: string;
+  details?: string;
 }
 
 export interface TechnicalSEOResult {
-  siteId: string;
-  domain: string;
   score: number;
-  grade: {
-    letter: string;
-    color: string;
-    label: string;
-  };
   issues: TechnicalSEOIssue[];
-  checks: {
-    passed: number;
-    failed: number;
-    total: number;
-  };
   recommendations: string[];
-  robotsTxt: {
-    exists: boolean;
-    valid: boolean;
-    content?: string;
-    issues?: string[];
-  };
-  sitemap: {
-    exists: boolean;
-    valid: boolean;
-    urls?: number;
-    issues?: string[];
-  };
-  ssl: {
-    valid: boolean;
-    expires?: string;
-    issues?: string[];
-  };
-  canonicals: {
-    valid: boolean;
-    issues?: string[];
-  };
-  mobileCompatibility: {
-    compatible: boolean;
-    issues?: string[];
-  };
-  structured_data: {
-    valid: boolean;
-    types?: string[];
-    issues?: string[];
-  };
-  http2: {
-    implemented: boolean;
-    issues?: string[];
-  };
-  resourceOptimization: {
-    jsMinified: boolean;
-    cssMinified: boolean;
-    issues?: string[];
-  };
-  createdAt: string;
+}
+
+export interface TechnicalSEOOptions {
+  checkSsl?: boolean;
+  checkRobotsTxt?: boolean;
+  checkSitemap?: boolean;
 }
 
 /**

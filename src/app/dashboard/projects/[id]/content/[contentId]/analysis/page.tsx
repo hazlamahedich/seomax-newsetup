@@ -1,5 +1,5 @@
 import React from 'react';
-import { createServerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, CheckCircle2, Clock, RefreshCcw } from 'lucide-react';
@@ -10,6 +10,22 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+// Define the types for the analysis data
+interface AnalysisRecord {
+  id: string;
+  page_id: string;
+  analysis_type: string;
+  result: any;
+  created_at: string;
+}
+
+interface ContentSuggestion {
+  id: string;
+  type: string;
+  suggestion: string;
+  implemented: boolean;
+}
+
 export const dynamic = 'force-dynamic';
 
 export default async function ContentAnalysisPage({ 
@@ -17,7 +33,7 @@ export default async function ContentAnalysisPage({
 }: { 
   params: { id: string; contentId: string } 
 }) {
-  const supabase = createServerClient();
+  const supabase = createClient();
   
   // Check if user is logged in
   const { data: { session } } = await supabase.auth.getSession();
@@ -53,20 +69,24 @@ export default async function ContentAnalysisPage({
   const { data: contentAnalyses } = await supabase
     .from('content_analysis')
     .select('*')
-    .eq('content_page_id', params.contentId)
-    .order('created_at', { ascending: false })
-    .limit(1);
-
-  const latestAnalysis = contentAnalyses?.[0];
-
-  // Get content suggestions
-  const { data: contentSuggestions } = await supabase
-    .from('content_suggestions')
-    .select('*')
-    .eq('content_analysis_id', latestAnalysis?.id || '')
+    .eq('page_id', params.contentId)
     .order('created_at', { ascending: false });
 
-  const suggestions = contentSuggestions || [];
+  console.log('Content analyses count:', contentAnalyses?.length);
+
+  // Extract specific analysis types
+  const readabilityAnalysis = contentAnalyses?.find(a => a.analysis_type === 'readability')?.result;
+  const keywordAnalysis = contentAnalyses?.find(a => a.analysis_type === 'keyword')?.result;
+  const structureAnalysis = contentAnalyses?.find(a => a.analysis_type === 'structure')?.result;
+  const suggestionsAnalysis = contentAnalyses?.find(a => a.analysis_type === 'suggestions')?.result || [];
+  const comprehensiveAnalysis = contentAnalyses?.find(a => a.analysis_type === 'comprehensive')?.result;
+
+  console.log('Found analyses:', { 
+    readability: !!readabilityAnalysis, 
+    keyword: !!keywordAnalysis, 
+    structure: !!structureAnalysis,
+    suggestions: Array.isArray(suggestionsAnalysis) ? suggestionsAnalysis.length : 'not an array'
+  });
 
   // Mock data for suggestions if needed
   const mockSuggestions = [
@@ -108,8 +128,15 @@ export default async function ContentAnalysisPage({
     }
   ];
 
-  // Use mock data if no real suggestions available
-  const allSuggestions = suggestions.length > 0 ? suggestions : mockSuggestions;
+  // Convert the suggestions from our analysis format to the ContentSuggestion format
+  const allSuggestions: ContentSuggestion[] = Array.isArray(suggestionsAnalysis) 
+    ? suggestionsAnalysis.map((s: any, index) => ({
+        id: `suggestion-${index}`,
+        type: s.suggestion_type?.toLowerCase() || 'general',
+        suggestion: s.suggested_text || '',
+        implemented: false
+      }))
+    : mockSuggestions;
 
   // Mock data for analysis summary if needed
   const mockAnalysisSummary = {
@@ -134,13 +161,6 @@ export default async function ContentAnalysisPage({
     ]
   };
 
-  // Calculate implementation status
-  const implementedCount = allSuggestions.filter(s => s.implemented).length;
-  const implementationPercentage = Math.round((implementedCount / allSuggestions.length) * 100) || 0;
-
-  // Get overall score
-  const overallScore = latestAnalysis?.overall_score || 75;
-
   // Function to determine status badge style
   const getStatusBadge = (type: string) => {
     switch(type) {
@@ -154,6 +174,17 @@ export default async function ContentAnalysisPage({
         return <Badge>General</Badge>;
     }
   };
+
+  // Calculate implementation status - actual implementation would handle the implemented flag
+  const implementedCount = allSuggestions.filter(s => s.implemented).length;
+  const implementationPercentage = Math.round((implementedCount / allSuggestions.length) * 100) || 0;
+
+  // Get overall score from the comprehensive analysis or readability score as fallback
+  const overallScore = comprehensiveAnalysis?.content_score || 
+                       readabilityAnalysis?.readability_score || 
+                       keywordAnalysis?.optimization_score || 
+                       structureAnalysis?.structure_score || 
+                       75;
 
   return (
     <div className="space-y-8">
@@ -270,15 +301,15 @@ export default async function ContentAnalysisPage({
                 <div className="grid grid-cols-3 gap-4">
                   <div className="border rounded-md p-3 text-center">
                     <p className="text-sm text-muted-foreground">Word Count</p>
-                    <p className="text-xl font-semibold">{contentPage.word_count || mockAnalysisSummary.wordCount}</p>
+                    <p className="text-xl font-semibold">{contentPage.word_count || readabilityAnalysis?.word_count || mockAnalysisSummary.wordCount}</p>
                   </div>
                   <div className="border rounded-md p-3 text-center">
                     <p className="text-sm text-muted-foreground">Reading Time</p>
-                    <p className="text-xl font-semibold">{mockAnalysisSummary.readingTime}</p>
+                    <p className="text-xl font-semibold">{readabilityAnalysis?.reading_time || mockAnalysisSummary.readingTime}</p>
                   </div>
                   <div className="border rounded-md p-3 text-center">
-                    <p className="text-sm text-muted-foreground">Paragraphs</p>
-                    <p className="text-xl font-semibold">{mockAnalysisSummary.paragraphCount}</p>
+                    <p className="text-sm text-muted-foreground">Readability</p>
+                    <p className="text-xl font-semibold">{readabilityAnalysis?.reading_level || "Middle school"}</p>
                   </div>
                 </div>
               </CardContent>
@@ -347,41 +378,80 @@ export default async function ContentAnalysisPage({
                       <h3 className="text-sm font-medium mb-3">Keyword Distribution</h3>
                       
                       <div className="space-y-3">
-                        {mockAnalysisSummary.topKeywords.map((keyword, index) => (
-                          <div key={index} className="space-y-1">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">{keyword.keyword}</span>
-                              <span className="text-xs text-muted-foreground">{keyword.count} mentions</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-blue-500 h-2 rounded-full" 
-                                style={{ width: `${Math.min((keyword.count / 12) * 100, 100)}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        ))}
+                        {/* Use real keyword data if available, otherwise fall back to mock data */}
+                        {keywordAnalysis?.related_keywords 
+                          ? keywordAnalysis.related_keywords.map((keyword, index) => (
+                              <div key={index} className="space-y-1">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm">{keyword}</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className="bg-blue-500 h-2 rounded-full" 
+                                    style={{ width: `${Math.min(((10 - index) / 10) * 100, 100)}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            ))
+                          : mockAnalysisSummary.topKeywords.map((keyword, index) => (
+                              <div key={index} className="space-y-1">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm">{keyword.keyword}</span>
+                                  <span className="text-xs text-muted-foreground">{keyword.count} mentions</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className="bg-blue-500 h-2 rounded-full" 
+                                    style={{ width: `${Math.min((keyword.count / 12) * 100, 100)}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            ))
+                        }
                       </div>
                       
                       <div className="pt-4">
                         <h3 className="text-sm font-medium mb-3">Keyword Placement</h3>
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="flex items-center gap-2">
-                            <div className={`h-3 w-3 rounded-full ${true ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                            <span className="text-sm">Title</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className={`h-3 w-3 rounded-full ${true ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                            <span className="text-sm">H1 Heading</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className={`h-3 w-3 rounded-full ${true ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                            <span className="text-sm">First Paragraph</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className={`h-3 w-3 rounded-full ${false ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                            <span className="text-sm">Meta Description</span>
-                          </div>
+                          {keywordAnalysis?.keyword_placement ? (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <div className={`h-3 w-3 rounded-full ${keywordAnalysis.keyword_placement.title ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                <span className="text-sm">Title</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className={`h-3 w-3 rounded-full ${keywordAnalysis.keyword_placement.headings ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                <span className="text-sm">H1 Heading</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className={`h-3 w-3 rounded-full ${keywordAnalysis.keyword_placement.intro ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                <span className="text-sm">First Paragraph</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className={`h-3 w-3 rounded-full ${keywordAnalysis.keyword_placement.conclusion ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                <span className="text-sm">Conclusion</span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <div className={`h-3 w-3 rounded-full ${true ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                <span className="text-sm">Title</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className={`h-3 w-3 rounded-full ${true ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                <span className="text-sm">H1 Heading</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className={`h-3 w-3 rounded-full ${true ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                <span className="text-sm">First Paragraph</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className={`h-3 w-3 rounded-full ${false ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                <span className="text-sm">Meta Description</span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -463,10 +533,15 @@ export default async function ContentAnalysisPage({
                         <form action={async () => {
                           'use server';
                           
-                          if (suggestions.length > 0) {
-                            // If we have real suggestions, update them
+                          // In a real implementation, we would update the suggestion status
+                          // This is just a placeholder since we're using mock data
+                          // If we have real suggestions with IDs, we would update them in the database
+                          /*
+                          if (suggestionsAnalysis.length > 0) {
+                            // Real implementation would update the suggestion in the database
                             await ContentPageService.updateContentSuggestion(suggestion.id, true);
                           }
+                          */
                           
                           // Redirect to the same page to refresh the data
                           redirect(`/dashboard/projects/${params.id}/content/${params.contentId}/analysis`);

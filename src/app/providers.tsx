@@ -2,7 +2,7 @@
 
 import { SessionProvider } from "next-auth/react";
 import { ReactNode, useEffect, useState, useRef } from "react";
-import { ExtendedAuthProvider } from "@/components/providers/auth-provider";
+import { AuthProvider } from "@/components/providers/auth-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 
@@ -327,9 +327,9 @@ export function Providers({ children }: ProvidersProps) {
         // Add fallback session to prevent errors when session fetch fails
         session={isClient && sessionCache.data ? sessionCache.data : fallbackSession}
       >
-        <ExtendedAuthProvider>
+        <AuthProvider>
           {children}
-        </ExtendedAuthProvider>
+        </AuthProvider>
       </SessionProvider>
     </QueryClientProvider>
   );

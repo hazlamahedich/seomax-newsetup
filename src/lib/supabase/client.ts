@@ -31,6 +31,13 @@ export const createClient = (url?: string, key?: string) => {
       auth: {
         persistSession: true,
       },
+      global: {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+      },
     }
   );
 };

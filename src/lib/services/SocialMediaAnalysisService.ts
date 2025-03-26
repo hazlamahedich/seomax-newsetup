@@ -10,6 +10,10 @@ export interface SocialMediaProfile {
   postFrequency: number; // Average posts per week
   lastUpdated: string;
   verified: boolean;
+  profileConsistency: number;
+  siteIntegration: number;
+  reachGrowth: number;
+  engagementRate: number;
 }
 
 export interface SocialMediaMetrics {
@@ -19,6 +23,8 @@ export interface SocialMediaMetrics {
   averagePostFrequency: number;
   profileConsistency: number; // Percentage of profile elements consistent across platforms
   siteIntegration: number; // Scale of 0-100 representing social media integration on the website
+  reachGrowth: number;
+  engagementRate: number;
 }
 
 export interface SocialMediaIntegration {
@@ -169,116 +175,23 @@ export class SocialMediaAnalysisService {
     ];
     
     // Not all platforms may be present
-    const numPlatforms = random(3, 7);
-    const selectedPlatforms = platforms.sort(() => 0.5 - Math.random()).slice(0, numPlatforms);
+    const numPlatforms = random(2, platforms.length);
+    const selectedPlatforms = platforms.slice(0, numPlatforms);
     
-    const domainName = domain.split('.')[0];
-    
-    return selectedPlatforms.map(platform => {
-      // Create platform-specific usernames
-      let username = '';
-      switch (platform) {
-        case 'facebook':
-          username = random(0, 100) > 50 ? domainName : `${domainName}official`;
-          break;
-        case 'twitter':
-          username = random(0, 100) > 50 ? `@${domainName}` : `@${domainName}_official`;
-          break;
-        case 'instagram':
-          username = random(0, 100) > 50 ? domainName : `${domainName}_official`;
-          break;
-        case 'linkedin':
-          username = `${domainName}-company`;
-          break;
-        case 'pinterest':
-          username = domainName;
-          break;
-        case 'youtube':
-          username = `${domainName}Channel`;
-          break;
-        case 'tiktok':
-          username = `@${domainName}`;
-          break;
-      }
-      
-      // Generate followers based on platform
-      let followers = 0;
-      switch (platform) {
-        case 'facebook':
-          followers = random(500, 50000);
-          break;
-        case 'twitter':
-          followers = random(200, 20000);
-          break;
-        case 'instagram':
-          followers = random(1000, 30000);
-          break;
-        case 'linkedin':
-          followers = random(100, 5000);
-          break;
-        case 'pinterest':
-          followers = random(50, 3000);
-          break;
-        case 'youtube':
-          followers = random(100, 10000);
-          break;
-        case 'tiktok':
-          followers = random(500, 20000);
-          break;
-      }
-      
-      // Generate engagement rate (0.5% - 5%)
-      const engagement = random(5, 50) / 10;
-      
-      // Generate post frequency (0.5 - 7 posts per week)
-      const postFrequency = random(5, 70) / 10;
-      
-      // Generate last updated date (within the last 30 days)
-      const now = new Date();
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const lastUpdatedTime = thirtyDaysAgo.getTime() + random(0, now.getTime() - thirtyDaysAgo.getTime());
-      const lastUpdated = new Date(lastUpdatedTime).toISOString();
-      
-      // Generate verified status (20% chance)
-      const verified = random(0, 100) < 20;
-      
-      // Generate platform URL
-      let url = '';
-      switch (platform) {
-        case 'facebook':
-          url = `https://facebook.com/${username}`;
-          break;
-        case 'twitter':
-          url = `https://twitter.com/${username.replace('@', '')}`;
-          break;
-        case 'instagram':
-          url = `https://instagram.com/${username}`;
-          break;
-        case 'linkedin':
-          url = `https://linkedin.com/company/${username}`;
-          break;
-        case 'pinterest':
-          url = `https://pinterest.com/${username}`;
-          break;
-        case 'youtube':
-          url = `https://youtube.com/c/${username}`;
-          break;
-        case 'tiktok':
-          url = `https://tiktok.com/${username}`;
-          break;
-      }
-      
-      return {
-        platform,
-        url,
-        username,
-        followers,
-        engagement,
-        postFrequency,
-        lastUpdated,
-        verified
-      };
-    });
+    return selectedPlatforms.map(platform => ({
+      platform,
+      url: `https://${platform}.com/${domain.replace(/[^\w]/g, '')}`,
+      username: domain.replace(/[^\w]/g, ''),
+      followers: random(100, 10000),
+      engagement: random(1, 5),
+      postFrequency: random(1, 7),
+      lastUpdated: new Date(Date.now() - random(0, 30) * 24 * 60 * 60 * 1000).toISOString(),
+      verified: Math.random() > 0.8,
+      profileConsistency: random(60, 100),
+      siteIntegration: random(50, 100),
+      reachGrowth: random(-5, 15),
+      engagementRate: random(1, 8)
+    }));
   }
 
   /**
@@ -354,7 +267,9 @@ export class SocialMediaAnalysisService {
       platformCoverage,
       averagePostFrequency,
       profileConsistency,
-      siteIntegration
+      siteIntegration,
+      reachGrowth: 0,
+      engagementRate: 0
     };
   }
 
@@ -591,7 +506,7 @@ export class SocialMediaAnalysisService {
     
     // Add general recommendations
     recommendations.push('Develop a social media content calendar to maintain consistency');
-    recommendations.push('Cross-promote content across different social platforms while adapting to each platform's format');
+    recommendations.push('Cross-promote content across different social platforms while adapting to each platform\'s format');
     recommendations.push('Monitor social media metrics regularly and adjust your strategy based on performance data');
     
     // Remove duplicates and return
@@ -727,7 +642,9 @@ export class SocialMediaAnalysisService {
         platformCoverage: 0,
         averagePostFrequency: 0,
         profileConsistency: 0,
-        siteIntegration: 0
+        siteIntegration: 0,
+        reachGrowth: 0,
+        engagementRate: 0
       },
       integration: {
         hasSocialLinks: false,

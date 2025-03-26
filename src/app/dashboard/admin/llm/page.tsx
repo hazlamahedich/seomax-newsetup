@@ -82,6 +82,7 @@ import { LLMModelSchema } from "@/lib/ai/models/usage";
 import { LLMModelRepository, LLMUsageRepository } from "@/lib/ai/models/repository";
 import { Label } from "@/components/ui/label";
 import { initializeDefaultModel } from "./initialize-model";
+import { LLMModel } from '@/lib/ai/models/types';
 
 // Define the form schema for adding a new LLM model
 const formSchema = LLMModelSchema.extend({
@@ -745,6 +746,76 @@ export default function LLMManagementPage() {
       setTestResponse(String(error));
       toast({
         title: "Error debugging model",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  // Add a function to fix the base URL and set as default
+  const fixAndSetAsDefault = async () => {
+    if (!selectedModelId) {
+      toast({
+        title: "Missing information",
+        description: "Please select a model to set as default.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      setTestLoading(true);
+      // Get the selected model
+      const model = await LLMModelRepository.getModelById(selectedModelId);
+      
+      if (!model) {
+        throw new Error("Selected model not found");
+      }
+      
+      console.log("Original model details:", model);
+      
+      // Fix base URL if it looks problematic
+      let updatedBaseUrl = model.baseUrl;
+      if (updatedBaseUrl) {
+        // Clean up the URL - remove trailing spaces, extra dots, fix common issues
+        updatedBaseUrl = updatedBaseUrl.trim();
+        
+        // If it ends with /v1. (and possibly a space) fix it
+        if (updatedBaseUrl.match(/\/v1\.?\s*$/)) {
+          updatedBaseUrl = updatedBaseUrl.replace(/\/v1\.?\s*$/, '');
+        }
+        
+        // Remove any trailing spaces or dots
+        updatedBaseUrl = updatedBaseUrl.replace(/[\s.]+$/, '');
+      }
+      
+      // Update only the necessary fields
+      const updateData = {
+        baseUrl: updatedBaseUrl,
+        isDefault: true
+      };
+      
+      const updatedModel = await LLMModelRepository.updateModel(selectedModelId, updateData);
+      
+      console.log("Updated model:", updatedModel);
+      
+      if (updatedModel) {
+        toast({
+          title: "Success",
+          description: `Model "${updatedModel.name}" set as default and base URL fixed.`,
+        });
+        
+        // Refresh the model list
+        refreshModels();
+      } else {
+        throw new Error("Failed to update model");
+      }
+    } catch (error) {
+      console.error("Error fixing and setting model as default:", error);
+      toast({
+        title: "Error",
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       });
@@ -1432,6 +1503,13 @@ export default function LLMManagementPage() {
                         disabled={testLoading || !selectedModelId}
                       >
                         Debug Model
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={fixAndSetAsDefault}
+                        disabled={testLoading || !selectedModelId}
+                      >
+                        Fix URL & Set as Default
                       </Button>
                       <Button
                         onClick={handleTestPrompt}

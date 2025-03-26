@@ -6,6 +6,10 @@
  * and Supabase authentication.
  */
 
+import { ExtendedUser, StoredSession } from '@/lib/types/auth.types';
+
+const SESSION_STORAGE_KEY = 'seomax_session';
+
 // Constants for localStorage keys
 export const STORAGE_KEYS = {
   USER: 'seomax:user',
@@ -78,50 +82,19 @@ export function isValidUser(user: UserData | null): boolean {
  * Save user session data to localStorage
  * Only saves if the data has changed and has a valid ID
  */
-export const saveSessionToStorage = (userData: UserData | null, isAdmin = false): void => {
-  if (typeof window === 'undefined') return;
-  
-  try {
-    if (userData) {
-      // Validate the user ID is non-empty
-      if (!isValidUser(userData)) {
-        console.error('[SessionUtils] Cannot save user with invalid ID:', userData);
-        return;
-      }
-      
-      // Check if the data has changed before writing
-      const currentData = localStorage.getItem(STORAGE_KEYS.USER);
-      const currentAdmin = localStorage.getItem(STORAGE_KEYS.IS_ADMIN) === 'true';
-      
-      // Only update if the data is different
-      if (!currentData || 
-          isAdmin !== currentAdmin || 
-          JSON.stringify(userData) !== currentData) {
-        
-        // Store user information
-        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
-        // Store timestamp for expiry checking
-        localStorage.setItem(STORAGE_KEYS.AUTH_TIME, Date.now().toString());
-        // Store admin status separately for quick access
-        localStorage.setItem(STORAGE_KEYS.IS_ADMIN, isAdmin.toString());
-        
-        console.log('[SessionUtils] Saved user session to storage:', userData.email);
-      }
-    } else {
-      // Only clear if we actually have data stored
-      if (localStorage.getItem(STORAGE_KEYS.USER)) {
-        // Clear all session data
-        localStorage.removeItem(STORAGE_KEYS.USER);
-        localStorage.removeItem(STORAGE_KEYS.AUTH_TIME);
-        localStorage.removeItem(STORAGE_KEYS.IS_ADMIN);
-        
-        console.log('[SessionUtils] Cleared user session from storage');
-      }
-    }
-  } catch (error) {
-    console.error('[SessionUtils] Error saving session:', error);
+export function saveSessionToStorage(user: ExtendedUser | null, isAdmin: boolean): void {
+  if (!user) {
+    clearSessionStorage();
+    return;
   }
-};
+
+  const session: StoredSession = {
+    user,
+    isAdmin,
+    expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+  };
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+}
 
 // Cache for session information to avoid excessive localStorage reads
 let cachedSession: StoredUser | null = null;
@@ -131,63 +104,16 @@ let cachedSession: StoredUser | null = null;
  * Returns null if no valid session exists or if session has expired
  * Uses a cache to reduce localStorage reads
  */
-export function getSessionFromStorage(): { user: UserData | null; isAdmin: boolean } {
-  if (typeof window === 'undefined') {
-    return { user: null, isAdmin: false };
+export function getSessionFromStorage(): StoredSession {
+  const sessionStr = localStorage.getItem(SESSION_STORAGE_KEY);
+  if (!sessionStr) {
+    return {
+      user: null,
+      isAdmin: false,
+      expires: new Date(0).toISOString()
+    };
   }
-
-  try {
-    // Use cached value if available and recent (less than 1 second old)
-    if (cachedSession && Date.now() - cachedSession.timestamp < 1000) {
-      return { user: cachedSession.user, isAdmin: cachedSession.isAdmin };
-    }
-    
-    const storedUser = localStorage.getItem(STORAGE_KEYS.USER);
-    const authTime = localStorage.getItem(STORAGE_KEYS.AUTH_TIME);
-    const storedIsAdmin = localStorage.getItem(STORAGE_KEYS.IS_ADMIN) === 'true';
-    
-    if (!storedUser || !authTime) {
-      cachedSession = { user: null, isAdmin: false, timestamp: Date.now() };
-      return { user: null, isAdmin: false };
-    }
-    
-    // Check if auth data is less than 4 hours old
-    const authTimestamp = parseInt(authTime, 10);
-    const now = Date.now();
-    const fourHours = 4 * 60 * 60 * 1000;
-    
-    if (now - authTimestamp > fourHours) {
-      // Auth data is too old, clear it
-      console.log('[SessionUtils] Session expired, clearing');
-      clearSessionStorage();
-      
-      cachedSession = { user: null, isAdmin: false, timestamp: Date.now() };
-      return { user: null, isAdmin: false };
-    }
-    
-    const user = JSON.parse(storedUser) as UserData;
-    
-    // Validate the user has a valid ID
-    if (!isValidUser(user)) {
-      console.error('[SessionUtils] Retrieved user with invalid ID, removing from storage');
-      clearSessionStorage();
-      cachedSession = { user: null, isAdmin: false, timestamp: Date.now() };
-      return { user: null, isAdmin: false };
-    }
-    
-    // Only log if we haven't logged recently
-    if (!cachedSession || cachedSession.user?.email !== user.email) {
-      console.log('[SessionUtils] Retrieved user session from storage:', user.email);
-    }
-    
-    // Update the cache
-    cachedSession = { user, isAdmin: storedIsAdmin, timestamp: Date.now() };
-    return { user, isAdmin: storedIsAdmin };
-  } catch (error) {
-    console.error('[SessionUtils] Error reading session:', error);
-    clearSessionStorage();
-    return { user: null, isAdmin: false };
-  }
+  return JSON.parse(sessionStr);
 }
 
 /**
@@ -219,18 +145,9 @@ export const checkIsAdminFromStorage = (): boolean => {
 /**
  * Clear all session data from localStorage
  */
-export const clearSessionStorage = (): void => {
-  if (typeof window === 'undefined') return;
-  
-  try {
-    localStorage.removeItem(STORAGE_KEYS.USER);
-    localStorage.removeItem(STORAGE_KEYS.AUTH_TIME);
-    localStorage.removeItem(STORAGE_KEYS.IS_ADMIN);
-    console.log('[SessionUtils] Cleared all session data');
-  } catch (error) {
-    console.error('[SessionUtils] Error clearing session:', error);
-  }
-};
+export function clearSessionStorage(): void {
+  localStorage.removeItem(SESSION_STORAGE_KEY);
+}
 
 /**
  * Update admin status in storage without changing other session data
@@ -266,4 +183,9 @@ export function debugSessionInfo(location: string) {
     console.error(`[DEBUG:${location}] Error checking session:`, e);
     return { hasUser: false, userId: 'error', isAdmin: false };
   }
+}
+
+export function isSessionExpired(session: StoredSession): boolean {
+  if (!session.expires) return true;
+  return new Date(session.expires) < new Date();
 } 

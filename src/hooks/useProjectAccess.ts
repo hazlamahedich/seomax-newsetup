@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useExtendedAuth } from '@/components/providers/auth-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 
 interface ProjectAccessProps {
   projectId: string;
@@ -20,7 +20,7 @@ export function useProjectAccess({ projectId }: ProjectAccessProps): ProjectAcce
   const [error, setError] = useState<string | null>(null);
   const [projectExists, setProjectExists] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
-  const auth = useExtendedAuth();
+  const auth = useAuth();
   
   const verifyAccess = useCallback(async (): Promise<boolean> => {
     if (!projectId) {

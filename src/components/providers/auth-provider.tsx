@@ -1,59 +1,50 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, AuthError } from '@supabase/supabase-js';
 import { useSession } from 'next-auth/react';
 import { 
   saveSessionToStorage, 
   getSessionFromStorage,
   clearSessionStorage,
-  UserData 
 } from '@/lib/auth/session-utils';
+import { useRouter } from 'next/navigation';
+import { ServiceError } from '@/lib/types/common';
+import { 
+  ExtendedUser, 
+  ExtendedSession, 
+  AuthResponse, 
+  AuthContextType,
+  isExtendedUser,
+  isExtendedSession,
+  convertNextAuthToExtendedSession
+} from '@/lib/types/auth.types';
+import { supabase } from '@/lib/supabase/client';
 
 // Create a Supabase client
-const supabase = createClient(
+const supabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-// User type for better type safety
-type User = {
-  id: string;
-  email?: string;
-  name?: string;
-  __supabase?: boolean; // Marker to identify users coming from Supabase
-  [key: string]: any;
+const initialSession: ExtendedSession = {
+  user: null,
+  isAdmin: false,
+  expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours from now
 };
 
-type ExtendedAuthContextType = {
-  supabaseUser: User | null;
-  loading: boolean;
-  supabaseSignIn: (email: string, password: string) => Promise<any>;
-  supabaseSignOut: () => Promise<any>;
-  isAdmin: () => boolean;
-  getActiveUser: () => User | null;
-  refreshAuth: () => Promise<User | null>;
-  synchronizeSupabaseSession: () => Promise<void>;
-  checkProjectAccess: (projectId: string) => Promise<boolean>;
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Helper function to check if a session is admin
+const isSessionAdmin = (session: ExtendedSession | null): boolean => {
+  if (!session?.user?.email) return false;
+  return session.user.email.endsWith('@seomax.com');
 };
 
-const ExtendedAuthContext = createContext<ExtendedAuthContextType>({
-  supabaseUser: null,
-  loading: true,
-  supabaseSignIn: async () => null,
-  supabaseSignOut: async () => null,
-  isAdmin: () => false,
-  getActiveUser: () => null,
-  refreshAuth: async () => null,
-  synchronizeSupabaseSession: async () => {},
-  checkProjectAccess: async () => false,
-});
-
-export function ExtendedAuthProvider({ children }: { children: React.ReactNode }) {
-  // Try to initialize with stored user to prevent flash of unauthenticated state
-  const initialSession = getSessionFromStorage();
-  const [supabaseUser, setSupabaseUser] = useState<User | null>(initialSession.user as User | null);
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [supabaseUser, setSupabaseUser] = useState<ExtendedUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   
   // Track initialization to prevent multiple setups
@@ -67,10 +58,33 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
 
   // Debug on initial render
   useEffect(() => {
+    const extendedSession = convertNextAuthToExtendedSession(session);
     console.log('[AuthProvider] Initial render with stored session:', 
-      initialSession.user?.email, 
-      'isAdmin:', initialSession.isAdmin);
-  }, []);
+      extendedSession?.user?.email, 
+      'isAdmin:', extendedSession?.isAdmin);
+  }, [session]);
+
+  // Update getExtendedSession to use the conversion function
+  const getExtendedSession = (session: any): ExtendedSession | null => {
+    return convertNextAuthToExtendedSession(session);
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const extendedSession = getExtendedSession(session);
+        console.log(
+          '[AuthProvider] Initial session state:',
+          'session:', extendedSession?.user?.email,
+          'isAdmin:', extendedSession?.isAdmin
+        );
+      } catch (error) {
+        console.error('[AuthProvider] Error in init:', error);
+      }
+    };
+
+    init();
+  }, [session]);
 
   // Synchronize Supabase session with NextAuth
   const synchronizeSupabaseSession = useCallback(async (): Promise<void> => {
@@ -93,12 +107,12 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
       };
       
       // Try to get a valid user from any source
-      let validUser: User | null = null;
+      let validUser: ExtendedUser | null = null;
       
       // First check NextAuth
       if (session?.user && isValidUser(session.user)) {
         console.log('[AuthProvider] Using NextAuth user for sync:', session.user.email);
-        validUser = session.user as User;
+        validUser = session.user as ExtendedUser;
       } 
       // Then check Supabase
       else if (supabaseUser && isValidUser(supabaseUser)) {
@@ -111,7 +125,7 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
           const storedSession = getSessionFromStorage();
           if (storedSession.user && isValidUser(storedSession.user)) {
             console.log('[AuthProvider] Using stored user for sync:', storedSession.user.email);
-            validUser = storedSession.user as User;
+            validUser = storedSession.user as ExtendedUser;
           }
         } catch (storageError) {
           console.error('[AuthProvider] Failed to get user from storage:', storageError);
@@ -128,7 +142,7 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
           
           // Ensure we have a valid user object before storage
           if (validUser.id && typeof validUser.id === 'string' && validUser.id.trim() !== '') {
-            saveSessionToStorage(validUser as UserData, isAdmin);
+            saveSessionToStorage(validUser as ExtendedUser, isAdmin);
           } else {
             console.error('[AuthProvider] Refusing to save invalid user during sync:', validUser);
           }
@@ -218,7 +232,7 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
   }, [synchronizeSupabaseSession]);
 
   // Function to refresh auth state from both sources
-  const refreshAuth = useCallback(async (): Promise<User | null> => {
+  const refreshAuth = useCallback(async (): Promise<ExtendedUser | null> => {
     // Prevent refreshing too frequently (min 1 second between refreshes)
     const now = Date.now();
     if (now - lastUpdateTime.current < 1000) {
@@ -231,13 +245,13 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
     
     try {
       // Check Supabase auth
-      const { data: supabaseData, error } = await supabase.auth.getSession();
+      const { data: supabaseData, error } = await supabaseClient.auth.getSession();
       
       if (error) {
         console.error('[AuthProvider] Supabase session error:', error);
       }
       
-      const supabaseUser = supabaseData?.session?.user;
+      const supabaseUser = supabaseData?.session?.user as ExtendedUser;
       
       // Use either NextAuth or Supabase user, prioritizing admin users
       const nextAuthUser = session?.user;
@@ -246,7 +260,7 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
       const isNextAuthAdmin = nextAuthUser?.email?.endsWith('@seomax.com');
       const isSupabaseAdmin = supabaseUser?.email?.endsWith('@seomax.com');
       
-      let activeUser: User | null = null;
+      let activeUser: ExtendedUser | null = null;
       let isAdmin = false;
       
       // Validate user function
@@ -256,18 +270,18 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
       
       if (isNextAuthAdmin && nextAuthUser && hasValidId(nextAuthUser)) {
         console.log('[AuthProvider] Refresh found NextAuth admin user');
-        activeUser = nextAuthUser as User;
+        activeUser = nextAuthUser as ExtendedUser;
         isAdmin = true;
       } else if (isSupabaseAdmin && supabaseUser && hasValidId(supabaseUser)) {
         console.log('[AuthProvider] Refresh found Supabase admin user');
-        activeUser = supabaseUser as User;
+        activeUser = supabaseUser;
         isAdmin = true;
       } else if (nextAuthUser && hasValidId(nextAuthUser)) {
         console.log('[AuthProvider] Refresh found NextAuth user');
-        activeUser = nextAuthUser as User;
+        activeUser = nextAuthUser as ExtendedUser;
       } else if (supabaseUser && hasValidId(supabaseUser)) {
         console.log('[AuthProvider] Refresh found Supabase user');
-        activeUser = supabaseUser as User;
+        activeUser = supabaseUser;
         // Mark as coming from Supabase
         activeUser.__supabase = true;
       } else {
@@ -283,7 +297,7 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
         
         // Ensure user has valid ID before saving
         if (activeUser.id && typeof activeUser.id === 'string' && activeUser.id.trim() !== '') {
-          saveSessionToStorage(activeUser as UserData, isAdmin);
+          saveSessionToStorage(activeUser as ExtendedUser, isAdmin);
         } else {
           console.error('[AuthProvider] Refusing to save user with invalid ID during refresh');
         }
@@ -318,22 +332,22 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
           );
           
           // Enhanced validation to catch empty object IDs and empty strings
-          if (!session.user.id || 
+          if (!session.user.id ||
               session.user.id === "" ||
-              typeof session.user.id === 'object' || 
+              typeof session.user.id === 'object' ||
               (typeof session.user.id === 'string' && session.user.id.trim() === '')) {
             console.error('[AuthProvider] Initial NextAuth user has invalid ID:', JSON.stringify(session.user.id));
             
             // Try to recover from an invalid session by checking Supabase directly
             console.log('[AuthProvider] Attempting recovery by checking Supabase session');
             try {
-              const { data: supabaseData, error } = await supabase.auth.getSession();
+              const { data: supabaseData, error } = await supabaseClient.auth.getSession();
               
               if (error) {
                 console.error('[AuthProvider] Supabase recovery error:', error);
               } else if (supabaseData?.session?.user) {
                 // Supabase has a valid session - use it instead
-                const supabaseUser = supabaseData.session.user;
+                const supabaseUser = supabaseData.session.user as ExtendedUser;
                 console.log('[AuthProvider] Recovered with Supabase user:', supabaseUser.email);
                 
                 if (supabaseUser.id && typeof supabaseUser.id === 'string' && supabaseUser.id.trim() !== '') {
@@ -343,8 +357,8 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
                   };
                   
                   const isUserAdmin = supabaseUser.email?.endsWith('@seomax.com') || false;
-                  setSupabaseUser(markedUser as User);
-                  saveSessionToStorage(markedUser as UserData, isUserAdmin);
+                  setSupabaseUser(markedUser);
+                  saveSessionToStorage(markedUser as ExtendedUser, isUserAdmin);
                   
                   setLoading(false);
                   initialized.current = true;
@@ -375,8 +389,8 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
               __nextauth: true
             };
             
-            setSupabaseUser(markedUser as User);
-            saveSessionToStorage(markedUser as UserData, isUserAdmin);
+            setSupabaseUser(markedUser as ExtendedUser);
+            saveSessionToStorage(markedUser as ExtendedUser, isUserAdmin);
           } else {
             console.error('[AuthProvider] NextAuth user has invalid ID:', userId);
             clearSessionStorage();
@@ -388,13 +402,13 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
           console.log('[AuthProvider] No NextAuth session, checking Supabase');
           
           try {
-            const { data: supabaseData, error } = await supabase.auth.getSession();
+            const { data: supabaseData, error } = await supabaseClient.auth.getSession();
             
             if (error) {
               console.error('[AuthProvider] Supabase session error:', error);
             }
             
-            const supabaseUser = supabaseData?.session?.user;
+            const supabaseUser = supabaseData?.session?.user as ExtendedUser;
             
             if (supabaseUser?.id) {
               console.log('[AuthProvider] Supabase session found for user:', supabaseUser.email);
@@ -402,8 +416,8 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
               
               // Ensure user object has a valid ID before saving
               if (supabaseUser.id && typeof supabaseUser.id === 'string' && supabaseUser.id.trim() !== '') {
-                setSupabaseUser(supabaseUser as User);
-                saveSessionToStorage(supabaseUser as UserData, isUserAdmin);
+                setSupabaseUser(supabaseUser);
+                saveSessionToStorage(supabaseUser as ExtendedUser, isUserAdmin);
               } else {
                 console.error('[AuthProvider] Supabase user has invalid ID:', supabaseUser.id);
                 clearSessionStorage();
@@ -454,7 +468,7 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
         })
       );
       
-      const user = session.user as User;
+      const user = session.user as ExtendedUser;
       
       // Enhanced validation to catch empty string IDs and empty objects
       if (!user.id || 
@@ -487,7 +501,7 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
         if (!supabaseUser || supabaseUser.id !== user.id) {
           console.log('[AuthProvider] Updating with NextAuth user:', user.email);
           setSupabaseUser(markedUser);
-          saveSessionToStorage(markedUser as UserData, isUserAdmin);
+          saveSessionToStorage(markedUser as ExtendedUser, isUserAdmin);
         }
       } else {
         console.error('[AuthProvider] NextAuth user has invalid ID:', user);
@@ -509,32 +523,47 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
     }
   }, [session, sessionStatus, supabaseUser]);
 
-  const supabaseSignIn = async (email: string, password: string) => {
-    console.log('[AuthProvider] Attempting Supabase sign in for:', email);
+  const supabaseSignIn = async (email: string, password: string): Promise<AuthResponse> => {
     try {
-      const result = await supabase.auth.signInWithPassword({ email, password });
-      
-      if (result.error) {
-        console.error('[AuthProvider] Supabase sign in error:', result.error);
-        return result;
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        const serviceError: ServiceError = {
+          code: 'auth/sign-in-error',
+          message: error.message,
+          details: {
+            status: error.status,
+            name: error.name,
+            message: error.message
+          }
+        };
+        return { user: null, error: serviceError };
       }
-      
-      if (result.data.user) {
-        const isUserAdmin = email.endsWith('@seomax.com');
-        saveSessionToStorage(result.data.user as UserData, isUserAdmin);
-      }
-      
-      return result;
+
+      const extendedUser: ExtendedUser = {
+        ...data.user,
+        __supabase: true
+      };
+
+      return { user: extendedUser };
     } catch (error) {
-      console.error('[AuthProvider] Exception during Supabase sign in:', error);
-      throw error;
+      const serviceError: ServiceError = {
+        code: 'auth/unexpected-error',
+        message: 'An unexpected error occurred during sign in',
+        details: error instanceof Error ? { message: error.message } : { message: String(error) }
+      };
+      return { user: null, error: serviceError };
     }
   };
 
-  const supabaseSignOut = async () => {
+  const supabaseSignOut = async (): Promise<void> => {
     console.log('[AuthProvider] Supabase signing out');
     clearSessionStorage();
-    return supabase.auth.signOut();
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) throw error;
   };
 
   const isAdmin = () => {
@@ -550,7 +579,7 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
   };
   
   // Function to get the active user from either auth system
-  const getActiveUser = (): User | null => {
+  const getActiveUser = (): ExtendedUser | null => {
     // Add validation to ensure we don't return an invalid user
     const isValidUser = (user: any): boolean => {
       return Boolean(
@@ -568,14 +597,14 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
 
     // Then try NextAuth session
     if (session?.user && isValidUser(session.user)) {
-      return session.user as User;
+      return session.user as ExtendedUser;
     }
 
     // Finally, try localStorage
     try {
       const { user } = getSessionFromStorage();
       if (user && isValidUser(user)) {
-        return user as User;
+        return user as ExtendedUser;
       }
     } catch (e) {
       console.error('[AuthProvider] Error getting user from storage:', e);
@@ -585,20 +614,28 @@ export function ExtendedAuthProvider({ children }: { children: React.ReactNode }
   };
 
   return (
-    <ExtendedAuthContext.Provider value={{ 
-      supabaseUser, 
-      loading, 
-      supabaseSignIn, 
-      supabaseSignOut,
-      isAdmin,
-      getActiveUser,
-      refreshAuth,
-      synchronizeSupabaseSession,
-      checkProjectAccess
-    }}>
+    <AuthContext.Provider
+      value={{
+        supabaseUser,
+        loading,
+        supabaseSignIn,
+        supabaseSignOut,
+        isAdmin,
+        getActiveUser,
+        refreshAuth,
+        synchronizeSupabaseSession,
+        checkProjectAccess,
+      }}
+    >
       {children}
-    </ExtendedAuthContext.Provider>
+    </AuthContext.Provider>
   );
 }
 
-export const useExtendedAuth = () => useContext(ExtendedAuthContext); 
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+} 

@@ -87,10 +87,41 @@ export const authOptions: NextAuthOptions = {
       }
     }
   },
-  // Explicitly provide required values to prevent NextAuth from using dynamic APIs
-  secret: process.env.NEXTAUTH_SECRET,
+  // Validate required configuration
+  secret: (() => {
+    if (!process.env.NEXTAUTH_SECRET) {
+      console.error('NEXTAUTH_SECRET is not set');
+      throw new Error('Authentication configuration error');
+    }
+    return process.env.NEXTAUTH_SECRET;
+  })(),
   // Add debug mode in development
   debug: process.env.NODE_ENV === 'development',
+  // Enhanced error handling
+  events: {
+    error: async ({ error }: { error: Error }) => {
+      console.error('NextAuth error:', error);
+    },
+    signIn: async (message: {
+      user: User;
+      account: any;
+      profile?: any;
+      isNewUser?: boolean
+    }) => {
+      console.log('Successful sign in:', {
+        userId: message.user.id,
+        provider: message.account?.provider
+      });
+    },
+    signOut: async (message: {
+      token: any;
+      session: any
+    }) => {
+      console.log('User signed out:', {
+        userId: message.token?.sub
+      });
+    }
+  },
 };
 
 // Use standard export instead of custom handler

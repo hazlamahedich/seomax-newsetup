@@ -1,481 +1,453 @@
-import { completion } from 'litellm';
-import { ChatOpenAI } from "@langchain/openai";
-import { z } from "zod";
+import { Message } from 'ai';
+import { ChatOpenAI } from '@langchain/openai';
+import { BaseMessageLike } from '@langchain/core/messages';
+import { LLMModel, LLMModelSchema } from './models/usage';
+import { LLMModelRepository } from './models/repository';
 
-// Define model configuration schema
-export const LLMConfigSchema = z.object({
-  provider: z.enum(["openai", "anthropic", "azure", "groq", "cohere", "together", "custom", "local"]),
-  modelName: z.string(),
-  apiKey: z.string().optional(),
-  baseUrl: z.string().optional(),
-  temperature: z.number().min(0).max(1).default(0.2),
-  maxTokens: z.number().positive().default(2000),
-  costPerToken: z.number().positive().optional(),
-  costPerThousandTokens: z.number().positive().optional(),
-});
+// Export schema for use in UI components
+export const LLMConfigSchema = LLMModelSchema;
 
-export type LLMConfig = z.infer<typeof LLMConfigSchema>;
-
-// Metrics tracking for usage and costs
-export interface UsageMetrics {
-  totalTokens: number;
-  promptTokens: number;
-  completionTokens: number;
-  estimatedCost: number;
-  timestamp: Date;
+interface LiteLLMConfig {
   modelName: string;
-  provider: string;
-  requestId: string;
-  userId?: string;
-  projectId?: string;
+  apiKey: string | undefined;
+  baseUrl: string | undefined;
+  temperature: number;
+  maxTokens: number;
 }
 
-// Create a utility logger for the module
-const llmLogger = {
-  info: (message: string, data?: any) => {
-    console.log(`[LiteLLMProvider] ${message}`, data ? data : '');
-  },
-  warn: (message: string, data?: any) => {
-    console.warn(`[LiteLLMProvider] WARNING: ${message}`, data ? data : '');
-  },
-  error: (message: string, error: any) => {
-    console.error(`[LiteLLMProvider] ${message}`, error);
-    if (error?.stack) {
-      console.error(`[LiteLLMProvider] Error stack:`, error.stack);
-    }
-  },
-  debug: (message: string, data?: any) => {
-    console.log(`[LiteLLMProvider:DEBUG] ${message}`, data ? data : '');
-  }
-};
+interface StreamResponse {
+  stream: ReadableStream;
+}
+
+interface LangChainStreamResult {
+  stream: ReadableStream;
+  callbacks: any[];
+}
 
 export class LiteLLMProvider {
   private static instance: LiteLLMProvider;
-  private activeModels: Map<string, LLMConfig> = new Map();
-  private usageMetrics: UsageMetrics[] = [];
-  private defaultModel: string | null = null;
+  private defaultConfig: LiteLLMConfig;
+  private activeModels: Map<string, LLMModel>;
+  private initialized: boolean = false;
 
   private constructor() {
-    // Load configurations from environment or database
-    llmLogger.info('Initializing LiteLLM provider instance');
-    this.loadConfigurations();
+    // Initialize with safe defaults - will be overridden by loadConfigurations
+    this.defaultConfig = {
+      modelName: 'dummy-model',  // Will be replaced on first use
+      temperature: 0.7,
+      maxTokens: 2000,
+      apiKey: undefined,
+      baseUrl: undefined,
+    };
+    this.activeModels = new Map();
   }
 
   public static getInstance(): LiteLLMProvider {
     if (!LiteLLMProvider.instance) {
-      llmLogger.info('Creating new LiteLLMProvider instance');
       LiteLLMProvider.instance = new LiteLLMProvider();
     }
     return LiteLLMProvider.instance;
   }
 
-  private loadConfigurations() {
-    llmLogger.info('Loading LLM configurations');
+  private async loadConfigurations(): Promise<void> {
+    // Skip if already initialized
+    if (this.initialized) {
+      console.log('LiteLLMProvider: Already initialized, skipping loadConfigurations');
+      return;
+    }
+
+    try {
+      // First try to load models from the database
+      console.log('LiteLLMProvider: Loading models from database...');
+      let models = await LLMModelRepository.getAllModels();
+      
+      // If no models found with regular client, try with service role
+      if (models.length === 0) {
+        console.log('LiteLLMProvider: No models found with regular client, trying with service role');
+        models = await LLMModelRepository.getAllModels(true);
+      }
+      
+      console.log(`LiteLLMProvider: Loaded ${models.length} models from database`);
+      
+      if (models.length > 0) {
+        // Add all models to active models
+        let foundDefault = false;
+        models.forEach(model => {
+          if (model.id) {
+            this.activeModels.set(model.id, model);
+            console.log(`LiteLLMProvider: Added model to active models: ${model.name}, isDefault: ${model.isDefault}, baseUrl: ${model.baseUrl}`);
+            
+            // If this is the default model, update defaultConfig
+            if (model.isDefault) {
+              foundDefault = true;
+              console.log(`LiteLLMProvider: Setting default model to: ${model.name}`);
+              console.log(`LiteLLMProvider: Default model details - modelName: ${model.modelName}, baseUrl: ${model.baseUrl}, provider: ${model.provider}`);
+              
+              this.defaultConfig = {
+                modelName: model.modelName,
+                apiKey: model.apiKey || undefined,
+                baseUrl: model.baseUrl || undefined,
+                temperature: model.temperature || 0.7,
+                maxTokens: model.maxTokens || 2000,
+              };
+              console.log('LiteLLMProvider: Default config set:', this.defaultConfig);
+            }
+          }
+        });
+
+        // If we found models but no default, use the first model
+        if (!foundDefault && models.length > 0 && models[0].id) {
+          const firstModel = models[0];
+          console.log(`LiteLLMProvider: No default model found, using first model: ${firstModel.name}`);
+          this.defaultConfig = {
+            modelName: firstModel.modelName,
+            apiKey: firstModel.apiKey || undefined,
+            baseUrl: firstModel.baseUrl || undefined,
+            temperature: firstModel.temperature || 0.7,
+            maxTokens: firstModel.maxTokens || 2000,
+          };
+          console.log('LiteLLMProvider: Default config set to first model:', this.defaultConfig);
+        }
+        
+        this.initialized = true;
+        console.log('LiteLLMProvider: Loaded configurations from database');
+        return;
+      }
+      
+      // If no models found in the database, try to fetch the default model directly
+      console.log('LiteLLMProvider: No models found in database, trying to fetch default model directly');
+      this.defaultConfig = await this.fetchDefaultModelFromDB();
+      console.log('LiteLLMProvider: Default config set from fetchDefaultModelFromDB:', this.defaultConfig);
+      this.initialized = true;
+      return;
+      
+    } catch (error) {
+      console.error('LiteLLMProvider: Error loading configurations from database:', error);
+      console.error('LiteLLMProvider: Error details:', error instanceof Error ? error.message : 'Unknown error');
+      console.error('LiteLLMProvider: Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+      
+      // If there was an error, try to fetch the default model directly
+      console.log('LiteLLMProvider: Error occurred, trying to fetch default model directly');
+      this.defaultConfig = await this.fetchDefaultModelFromDB();
+      console.log('LiteLLMProvider: Default config set from fetchDefaultModelFromDB after error:', this.defaultConfig);
+      this.initialized = true;
+      return;
+    }
+
+    // This code should no longer be reached, but keeping as a last fallback
+    console.log('LiteLLMProvider: All attempts to load configurations failed, setting up fallback configuration');
+    // If no models in database or error occurred, set up default configuration
+    const openAiKey = process.env.OPENAI_API_KEY;
+    const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    const defaultModel = process.env.DEFAULT_OLLAMA_MODEL || 'llama3.2';
     
-    // Log environment variables (without sensitive values)
-    const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
-    llmLogger.debug('Environment check', { 
-      OPENAI_API_KEY_EXISTS: hasOpenAIKey,
-      NODE_ENV: process.env.NODE_ENV,
-    });
+    console.log(`LiteLLMProvider: Using environment variables - defaultModel: ${defaultModel}, ollamaBaseUrl: ${ollamaBaseUrl}, hasOpenAiKey: ${!!openAiKey}`);
     
-    // Default configuration - use Ollama in development if no OpenAI key
-    let defaultConfig: LLMConfig;
-    
-    if (!hasOpenAIKey && process.env.NODE_ENV === 'development') {
-      // Use Ollama as default in development when no OpenAI key
-      defaultConfig = {
-        provider: "local",
-        modelName: "deepseek-r1:14b", // Or other model available in Ollama
-        baseUrl: "http://localhost:11434/v1",
-        apiKey: "sk-no-key-required",
-        temperature: 0.2,
+    if (openAiKey) {
+      this.defaultConfig = {
+        modelName: 'gpt-3.5-turbo',
+        apiKey: openAiKey,
+        baseUrl: undefined,
+        temperature: 0.7,
         maxTokens: 2000,
-        costPerThousandTokens: 0, // Local models have no API costs
       };
-      llmLogger.info('No OpenAI API key found in development - defaulting to local Ollama model');
-    } else {
-      // Default to OpenAI if API key exists or in production
-      defaultConfig = {
-        provider: "openai",
-        modelName: "gpt-4o",
-        apiKey: process.env.OPENAI_API_KEY,
-        temperature: 0.2,
+      console.log('LiteLLMProvider: Set default config to OpenAI');
+    } else if (process.env.NODE_ENV === 'development') {
+      this.defaultConfig = {
+        modelName: defaultModel,
+        baseUrl: ollamaBaseUrl,
+        apiKey: undefined,
+        temperature: 0.7,
         maxTokens: 2000,
-        costPerThousandTokens: 10, // $10 per 1K tokens is a placeholder, adjust with actual pricing
       };
+      console.log(`LiteLLMProvider: Set default config to local model: ${defaultModel} at ${ollamaBaseUrl}`);
     }
 
-    llmLogger.debug('Adding default model configuration', {
-      provider: defaultConfig.provider,
-      modelName: defaultConfig.modelName,
-      hasApiKey: !!defaultConfig.apiKey,
-      hasBaseUrl: !!defaultConfig.baseUrl,
-      temperature: defaultConfig.temperature,
-      maxTokens: defaultConfig.maxTokens
-    });
-    
-    this.addModel("default", defaultConfig);
-    this.defaultModel = "default";
+    // Try to create a default model in the database using service role
+    try {
+      console.log('LiteLLMProvider: Creating default model in database using service role');
+      const defaultModelConfig = await LLMModelRepository.createModel({
+        name: 'Default Model',
+        provider: openAiKey ? 'openai' : 'local',
+        modelName: this.defaultConfig.modelName,
+        apiKey: this.defaultConfig.apiKey || null,
+        baseUrl: this.defaultConfig.baseUrl || null,
+        temperature: this.defaultConfig.temperature,
+        maxTokens: this.defaultConfig.maxTokens,
+        costPerToken: 0,
+        costPerThousandTokens: 0,
+        isDefault: true,
+      }, true); // Use service role
 
-    // Add any additional models from environment variables or database
-    // This is a placeholder for future implementation
-  }
-
-  public addModel(id: string, config: LLMConfig): void {
-    this.activeModels.set(id, config);
-    if (!this.defaultModel) {
-      this.defaultModel = id;
+      if (defaultModelConfig && defaultModelConfig.id) {
+        this.activeModels.set(defaultModelConfig.id, defaultModelConfig);
+        console.log(`LiteLLMProvider: Created and added default model to active models: ${defaultModelConfig.name}`);
+      }
+    } catch (error) {
+      console.error('LiteLLMProvider: Error creating default model in database:', error);
     }
+
+    this.initialized = true;
+    console.log('LiteLLMProvider: Initialization completed with fallback configuration');
   }
 
-  public removeModel(id: string): boolean {
-    if (id === this.defaultModel) {
-      return false; // Cannot remove default model
+  public async setDefaultModel(id: string): Promise<boolean> {
+    const model = await LLMModelRepository.getModelById(id);
+    if (!model) {
+      console.error('LiteLLMProvider: Model not found for ID:', id);
+      return false;
     }
-    return this.activeModels.delete(id);
-  }
 
-  public getModel(id: string): LLMConfig | undefined {
-    return this.activeModels.get(id);
-  }
+    try {
+      const updatedModel = await LLMModelRepository.updateModel(id, {
+        ...model,
+        isDefault: true,
+      });
 
-  public listModels(): { id: string; config: LLMConfig }[] {
-    return Array.from(this.activeModels.entries()).map(([id, config]) => ({ id, config }));
-  }
-
-  public setDefaultModel(id: string): boolean {
-    if (this.activeModels.has(id)) {
-      this.defaultModel = id;
-      return true;
+      if (updatedModel) {
+        this.defaultConfig = {
+          modelName: updatedModel.modelName,
+          apiKey: updatedModel.apiKey || undefined,
+          baseUrl: updatedModel.baseUrl || undefined,
+          temperature: updatedModel.temperature || 0.7,
+          maxTokens: updatedModel.maxTokens || 2000,
+        };
+        return true;
+      }
+    } catch (error) {
+      console.error('LiteLLMProvider: Error setting default model:', error);
     }
+
     return false;
   }
 
-  public getDefaultModel(): string | null {
-    return this.defaultModel;
-  }
-
-  // Create a LangChain compatible model instance
-  public getLangChainModel(modelId?: string): ChatOpenAI {
-    llmLogger.info(`getLangChainModel called for model ID: ${modelId || this.defaultModel || "default"}`);
-    try {
-      const configId = modelId || this.defaultModel || "default";
-      const config = this.activeModels.get(configId);
-      
-      if (!config) {
-        llmLogger.error(`Model configuration not found for ID: ${configId}`, { availableModels: Array.from(this.activeModels.keys()) });
-        // Default to a local Ollama model if config not found
-        llmLogger.info('Falling back to Ollama model (config not found)');
-        return this.createOllamaLangChainModel();
-      }
-
-      llmLogger.debug(`Using model config:`, { 
-        provider: config.provider, 
-        modelName: config.modelName,
-        hasBaseUrl: !!config.baseUrl
-      });
-
-      // If already configured to use local provider (Ollama)
-      if (config.provider === "local") {
-        llmLogger.info(`Using configured local Ollama model: ${config.modelName}`);
-        return this.createCustomOllamaModel(config.modelName, config.baseUrl);
-      }
-
-      // Check if we have valid authentication for non-local providers
-      const apiKey = config.apiKey || process.env.OPENAI_API_KEY || '';
-        
-      if (!apiKey || apiKey.trim() === '') {
-        llmLogger.warn(`No API key found for ${config.provider} model, falling back to Ollama`);
-        return this.createOllamaLangChainModel();
-      }
-
-      try {
-        // For regular providers like OpenAI
-        llmLogger.debug('Creating ChatOpenAI instance with:', {
-          modelName: config.modelName,
-          temperature: config.temperature,
-          maxTokens: config.maxTokens,
-          hasApiKey: !!apiKey,
-          hasBaseURL: !!config.baseUrl
-        });
-        
-        const chatModel = new ChatOpenAI({
-          modelName: config.modelName,
-          temperature: config.temperature,
-          maxTokens: config.maxTokens,
-          openAIApiKey: apiKey,
-          configuration: config.baseUrl ? {
-            baseURL: config.baseUrl,
-          } : undefined
-        });
-        
-        llmLogger.info(`Successfully created ChatOpenAI model: ${config.modelName}`);
-        return chatModel;
-      } catch (error) {
-        llmLogger.error('Error creating ChatOpenAI model:', error);
-        // If creating the model fails, try with Ollama as fallback
-        llmLogger.info('Falling back to Ollama after ChatOpenAI creation error');
-        return this.createOllamaLangChainModel();
-      }
-    } catch (error) {
-      llmLogger.error('getLangChainModel error, using Ollama fallback:', error);
-      return this.createOllamaLangChainModel();
-    }
-  }
-
-  // Create a LangChain compatible model using a specific Ollama model
-  private createCustomOllamaModel(modelName: string, baseUrl?: string): ChatOpenAI {
-    llmLogger.info(`Creating custom Ollama model: ${modelName}`);
-    try {
-      // Set environment variables for Ollama
-      const ollamaBaseUrl = baseUrl || "http://localhost:11434/v1";
-      process.env.OPENAI_API_BASE = ollamaBaseUrl;
-      
-      llmLogger.debug(`Setting up custom Ollama model`, {
-        modelName,
-        baseURL: ollamaBaseUrl
-      });
-      
-      const chatModel = new ChatOpenAI({
-        modelName: modelName,
-        temperature: 0.2,
-        maxTokens: 2000,
-        openAIApiKey: "sk-no-key-required",
-        configuration: {
-          baseURL: ollamaBaseUrl,
-        }
-      });
-      
-      llmLogger.info(`Successfully created custom Ollama model: ${modelName}`);
-      return chatModel;
-    } catch (error) {
-      llmLogger.error(`Failed to create custom Ollama model ${modelName}:`, error);
-      // Fall back to the default Ollama model
-      return this.createOllamaLangChainModel();
-    }
-  }
-
-  // Create a LangChain compatible model using local Ollama with default model
-  private createOllamaLangChainModel(): ChatOpenAI {
-    llmLogger.info('Creating fallback Ollama LangChain model');
-    try {
-      // Set environment variables for Ollama
-      const ollamaBaseUrl = "http://localhost:11434/v1";
-      process.env.OPENAI_API_BASE = ollamaBaseUrl;
-      
-      // Use a model we know exists in Ollama - adjust based on your installation
-      // Try a series of models in case some aren't available
-      const models = ["deepseek-coder", "deepseek-r1:14b", "llama3", "llama2"];
-      let modelName = models[0]; // Default to first option
-      
-      llmLogger.debug(`Setting up Ollama fallback model`, {
-        modelName,
-        baseURL: ollamaBaseUrl
-      });
-      
-      const chatModel = new ChatOpenAI({
-        modelName: modelName,
-        temperature: 0.2,
-        maxTokens: 2000,
-        openAIApiKey: "sk-no-key-required",
-        configuration: {
-          baseURL: ollamaBaseUrl,
-        }
-      });
-      
-      llmLogger.info(`Successfully created Ollama fallback model: ${modelName}`);
-      return chatModel;
-    } catch (error) {
-      llmLogger.error('Failed to create Ollama fallback model:', error);
-      throw new Error('Could not initialize any LLM model. Please check your configuration and ensure Ollama is running on port 11434.');
-    }
-  }
-
-  // Call LLM directly via litellm
-  public async callLLM(
-    prompt: string, 
-    modelId?: string,
-    options: {
-      userId?: string;
-      projectId?: string;
-    } = {}
-  ) {
-    const configId = modelId || this.defaultModel || "default";
-    const config = this.activeModels.get(configId);
+  private async createOllamaLangChainModel(config: LiteLLMConfig): Promise<ChatOpenAI> {
+    // Clean the baseUrl - make sure it has no spaces, ending periods, etc.
+    let cleanBaseUrl = config.baseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
     
-    if (!config) {
-      throw new Error(`Model configuration not found for ID: ${configId}`);
-    }
-
-    try {
-      // Set environment variable for the provider
-      if (config.apiKey) {
-        if (config.provider === "together") {
-          process.env.TOGETHER_API_KEY = config.apiKey;
-        } else if (config.provider === "local") {
-          // For local models with OpenAI-compatible API, use OPENAI_API_KEY
-          process.env.OPENAI_API_KEY = config.apiKey === "EMPTY" ? "" : config.apiKey;
-        } else {
-          process.env[`${config.provider.toUpperCase()}_API_KEY`] = config.apiKey;
-        }
-      }
-
-      // Construct the model string based on provider
-      let modelString = config.modelName;
-      if (config.provider === "local") {
-        // For local models, use the model name as is
-        modelString = config.modelName;
-      } else if (config.provider === "together") {
-        modelString = `together/${config.modelName}`;
-      } else if (config.provider !== "openai") {
-        modelString = `${config.provider}/${config.modelName}`;
-      }
-
-      // Set base URL if provided
-      if (config.baseUrl) {
-        if (config.provider === "together") {
-          process.env.TOGETHER_API_BASE = config.baseUrl;
-        } else if (config.provider === "local") {
-          // For local models, we use the OpenAI API base
-          process.env.OPENAI_API_BASE = config.baseUrl;
-        } else {
-          process.env.OPENAI_API_BASE = config.baseUrl;
-        }
-      }
-      
-      // For local models, we need to ensure a proper options structure
-      const completionOptions: any = {
-        model: modelString,
-        messages: [{ role: "user", content: prompt }],
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-      };
-      
-      // For local models, ensure we're using the correct API base
-      if (config.provider === "local") {
-        completionOptions.api_base = config.baseUrl;
-      }
-
-      const response = await completion(completionOptions);
-
-      // Record usage
-      if (response && response.usage) {
-        const requestId = `req_${Date.now()}`;
-        this.recordUsage({
-          totalTokens: response.usage.total_tokens,
-          promptTokens: response.usage.prompt_tokens,
-          completionTokens: response.usage.completion_tokens,
-          estimatedCost: this.calculateCost(response.usage.total_tokens, config),
-          modelName: config.modelName,
-          provider: config.provider,
-          requestId,
-          userId: options.userId,
-          projectId: options.projectId,
-        });
-      }
-
-      return response;
-    } catch (error) {
-      console.error('Error calling LLM:', error);
-      throw error;
-    }
-  }
-
-  private calculateCost(tokens: number, config: LLMConfig): number {
-    if (config.costPerToken) {
-      return tokens * config.costPerToken;
+    console.log(`createOllamaLangChainModel: Original baseUrl: "${cleanBaseUrl}"`);
+    
+    // Clean up the URL - remove trailing spaces, extra dots, fix common issues
+    cleanBaseUrl = cleanBaseUrl.trim();
+    
+    // If it ends with /v1. (and possibly a space) fix it
+    if (cleanBaseUrl.match(/\/v1\.?\s*$/)) {
+      cleanBaseUrl = cleanBaseUrl.replace(/\/v1\.?\s*$/, '/v1');
     }
     
-    if (config.costPerThousandTokens) {
-      return (tokens / 1000) * config.costPerThousandTokens;
-    }
+    // DO NOT remove /v1 suffix as it may be needed for the API
+    // Only cleanup trailing spaces or dots
+    cleanBaseUrl = cleanBaseUrl.replace(/[\s.]+$/, '');
     
-    // Default estimation based on common pricing
-    const defaultRates: Record<string, number> = {
-      "openai": 0.01, // $0.01 per 1K tokens as a placeholder
-      "anthropic": 0.015,
-      "azure": 0.01,
-      "groq": 0.005,
-      "cohere": 0.015,
-      "together": 0.007,
-      "custom": 0.01,
-      "local": 0.0, // Local models don't have API costs
-    };
-    
-    return (tokens / 1000) * (defaultRates[config.provider] || 0.01);
-  }
+    console.log(`createOllamaLangChainModel: Cleaned baseUrl to: "${cleanBaseUrl}"`);
 
-  // Track usage metrics
-  public recordUsage(metrics: Omit<UsageMetrics, 'timestamp'>): void {
-    this.usageMetrics.push({
-      ...metrics,
-      timestamp: new Date(),
+    // For local LLMs like Ollama, we need to provide a dummy API key
+    // to satisfy the ChatOpenAI constructor which requires an API key
+    const dummyApiKey = "dummy-key-for-local-llm";
+    
+    return new ChatOpenAI({
+      modelName: config.modelName,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      streaming: true,
+      openAIApiKey: dummyApiKey, // Add dummy API key
+      configuration: {
+        baseURL: cleanBaseUrl,
+      },
     });
-    
-    // Here we could also save metrics to database
-    this.saveMetricsToDatabase(metrics);
   }
 
-  private async saveMetricsToDatabase(metrics: Omit<UsageMetrics, 'timestamp'>): Promise<void> {
-    // Placeholder for database integration
-    // This would be implemented with your database solution (e.g., Supabase)
-    console.log('Saving metrics to database:', metrics);
+  private async createOpenAILangChainModel(config: LiteLLMConfig): Promise<ChatOpenAI> {
+    if (!config.apiKey) {
+      throw new Error('API key is required for OpenAI models');
+    }
+
+    return new ChatOpenAI({
+      modelName: config.modelName,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      streaming: true,
+      openAIApiKey: config.apiKey,
+    });
   }
 
-  // Get usage statistics
-  public getUsageStats(
-    startDate?: Date, 
-    endDate?: Date, 
-    modelId?: string, 
-    userId?: string
-  ): {
-    totalTokens: number;
-    totalCost: number;
-    requestCount: number;
-    usageByModel: Record<string, { tokens: number; cost: number; count: number }>;
-  } {
-    let filtered = this.usageMetrics;
-    
-    if (startDate) {
-      filtered = filtered.filter(m => m.timestamp >= startDate);
-    }
-    
-    if (endDate) {
-      filtered = filtered.filter(m => m.timestamp <= endDate);
-    }
-    
+  public async getLangChainModel(modelId?: string): Promise<ChatOpenAI> {
+    console.log("getLangChainModel: Starting to load configurations");
+    await this.loadConfigurations();
+    console.log("getLangChainModel: Configurations loaded, defaultConfig:", this.defaultConfig);
+    console.log("getLangChainModel: Initialized status:", this.initialized);
+    console.log("getLangChainModel: Number of active models:", this.activeModels.size);
+
+    // Log all models in cache for debugging
+    console.log("getLangChainModel: Active models:");
+    this.activeModels.forEach((model, id) => {
+      console.log(`  - ${id}: ${model.name} (${model.modelName}), isDefault: ${model.isDefault}, provider: ${model.provider}, baseUrl: ${model.baseUrl}`);
+    });
+
+    let config = this.defaultConfig;
+
     if (modelId) {
-      filtered = filtered.filter(m => m.modelName === modelId);
-    }
-    
-    if (userId) {
-      filtered = filtered.filter(m => m.userId === userId);
-    }
-    
-    const stats = {
-      totalTokens: 0,
-      totalCost: 0,
-      requestCount: filtered.length,
-      usageByModel: {} as Record<string, { tokens: number; cost: number; count: number }>,
-    };
-    
-    filtered.forEach(m => {
-      stats.totalTokens += m.totalTokens;
-      stats.totalCost += m.estimatedCost;
+      console.log("getLangChainModel: Specific model requested with ID:", modelId);
+      let model = await LLMModelRepository.getModelById(modelId);
       
-      if (!stats.usageByModel[m.modelName]) {
-        stats.usageByModel[m.modelName] = { tokens: 0, cost: 0, count: 0 };
+      // If not found with regular client, try with service role
+      if (!model) {
+        console.log("getLangChainModel: Model not found with regular client, trying with service role");
+        model = await LLMModelRepository.getModelById(modelId, true);
       }
       
-      stats.usageByModel[m.modelName].tokens += m.totalTokens;
-      stats.usageByModel[m.modelName].cost += m.estimatedCost;
-      stats.usageByModel[m.modelName].count += 1;
+      if (model) {
+        console.log("getLangChainModel: Found specific model:", model.name);
+        config = {
+          modelName: model.modelName,
+          apiKey: model.apiKey || undefined,
+          baseUrl: model.baseUrl || undefined,
+          temperature: model.temperature || 0.7,
+          maxTokens: model.maxTokens || 2000,
+        };
+      } else {
+        console.warn('LiteLLMProvider: Model not found, using default config');
+      }
+    }
+
+    console.log("getLangChainModel: Final config to use:", {
+      modelName: config.modelName,
+      baseUrl: config.baseUrl,
+      hasApiKey: !!config.apiKey
+    });
+
+    if (config.apiKey) {
+      console.log("getLangChainModel: Creating OpenAI model");
+      return this.createOpenAILangChainModel(config);
+    } else {
+      console.log("getLangChainModel: Creating Ollama model with URL:", config.baseUrl);
+      return this.createOllamaLangChainModel(config);
+    }
+  }
+
+  /**
+   * Get the current default model configuration
+   */
+  public async getDefaultModelConfig(): Promise<LiteLLMConfig> {
+    await this.loadConfigurations();
+    return this.defaultConfig;
+  }
+
+  /**
+   * Helper method to fetch the default model from the database with fallback
+   */
+  private async fetchDefaultModelFromDB(): Promise<LiteLLMConfig> {
+    try {
+      console.log('LiteLLMProvider.fetchDefaultModelFromDB: Attempting to get default model from database');
+      
+      // Try to get the default model from the database first
+      let defaultModel = await LLMModelRepository.getDefaultModel();
+      
+      // If not found with regular client, try with service role
+      if (!defaultModel) {
+        console.log('LiteLLMProvider.fetchDefaultModelFromDB: Default model not found with regular client, trying with service role');
+        defaultModel = await LLMModelRepository.getDefaultModel(true);
+      }
+      
+      if (defaultModel) {
+        console.log(`LiteLLMProvider.fetchDefaultModelFromDB: Found default model in database: ${defaultModel.name}`);
+        const config: LiteLLMConfig = {
+          modelName: defaultModel.modelName,
+          apiKey: defaultModel.apiKey || undefined,
+          baseUrl: defaultModel.baseUrl || undefined,
+          temperature: defaultModel.temperature || 0.7,
+          maxTokens: defaultModel.maxTokens || 2000,
+        };
+        
+        return config;
+      }
+      
+      console.log('LiteLLMProvider.fetchDefaultModelFromDB: No default model found in database, using environment variables');
+    } catch (error) {
+      console.error('LiteLLMProvider.fetchDefaultModelFromDB: Error getting default model:', error);
+    }
+    
+    // If no default model in database or error, use environment variables
+    const openAiKey = process.env.OPENAI_API_KEY;
+    if (openAiKey) {
+      const config: LiteLLMConfig = {
+        modelName: 'gpt-3.5-turbo',
+        apiKey: openAiKey,
+        baseUrl: undefined,
+        temperature: 0.7,
+        maxTokens: 2000,
+      };
+      return config;
+    }
+    
+    // If no OpenAI key, fall back to Ollama
+    const config: LiteLLMConfig = {
+      modelName: process.env.DEFAULT_OLLAMA_MODEL || 'llama3.2',
+      baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+      apiKey: undefined,
+      temperature: 0.7,
+      maxTokens: 2000,
+    };
+    
+    return config;
+  }
+
+  /**
+   * List all active models
+   */
+  public async listModels(): Promise<Array<{ id: string, name: string }>> {
+    await this.loadConfigurations();
+    const modelList: Array<{ id: string, name: string }> = [];
+    
+    this.activeModels.forEach((model, id) => {
+      modelList.push({
+        id,
+        name: model.name || model.modelName
+      });
     });
     
-    return stats;
+    return modelList;
   }
-}
 
-// Export a singleton instance
-export const liteLLMProvider = LiteLLMProvider.getInstance(); 
+  public async callLLM(
+    messages: Message[],
+    modelId?: string
+  ): Promise<StreamResponse> {
+    const model = await this.getLangChainModel(modelId);
+    const { stream, callbacks } = await this.createLangChainStream();
+    
+    model
+      .call(messages.map(msg => ({ role: msg.role, content: msg.content })) as BaseMessageLike[], {}, callbacks)
+      .catch(console.error);
+
+    return { stream };
+  }
+
+  private async createLangChainStream(): Promise<LangChainStreamResult> {
+    const { createParser } = await import('eventsource-parser');
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    
+    let streamController: ReadableStreamController<any>;
+    const stream = new ReadableStream({
+      start(controller) {
+        streamController = controller;
+      },
+    });
+
+    const callbacks = [{
+      handleLLMNewToken(token: string) {
+        streamController.enqueue(encoder.encode(`data: ${token}\n\n`));
+      },
+      handleLLMEnd() {
+        streamController.close();
+      },
+      handleLLMError(error: Error) {
+        console.error('LiteLLMProvider: Stream error:', error);
+        streamController.error(error);
+      },
+    }];
+
+    return { stream, callbacks };
+  }
+} 

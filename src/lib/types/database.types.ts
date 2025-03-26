@@ -1,3 +1,171 @@
+// SERP Analysis Types
+export interface SerpFeature {
+  type: string;
+  position: number;
+  content?: string;
+}
+
+export interface SerpAnalysis {
+  features: SerpFeature[];
+  topResults: {
+    url: string;
+    title: string;
+    description: string;
+    position: number;
+  }[];
+  searchVolume?: number;
+  competitionLevel?: number;
+  cpc?: number;
+}
+
+// Content Analysis Types
+export interface ReadabilityAnalysis {
+  score: number;
+  fleschKincaidScore?: number;
+  averageSentenceLength: number;
+  averageWordLength: number;
+  passiveVoiceCount: number;
+  complexWordCount: number;
+  readingTime: number;
+  suggestions: string[];
+}
+
+export interface KeywordAnalysisResult {
+  primaryKeyword: {
+    keyword: string;
+    density: number;
+    count: number;
+    positions: number[];
+  };
+  secondaryKeywords: {
+    keyword: string;
+    density: number;
+    count: number;
+  }[];
+  missingKeywords: string[];
+  suggestions: string[];
+}
+
+export interface StructureAnalysis {
+  headingStructure: {
+    h1Count: number;
+    h2Count: number;
+    h3Count: number;
+    h4Count: number;
+    h5Count: number;
+    h6Count: number;
+  };
+  paragraphCount: number;
+  listCount: number;
+  imageCount: number;
+  linkCount: {
+    internal: number;
+    external: number;
+  };
+  suggestions: string[];
+}
+
+// Content Brief Types
+export interface ContentBriefSection {
+  title: string;
+  subSections?: ContentBriefSection[];
+  keyPoints?: string[];
+  targetWordCount?: number;
+  keywords?: string[];
+}
+
+export interface ContentBriefOutline {
+  introduction: ContentBriefSection;
+  mainSections: ContentBriefSection[];
+  conclusion: ContentBriefSection;
+  targetTotalWordCount: number;
+  suggestedTitle: string;
+  metaDescription: string;
+}
+
+export interface CompetitorInsight {
+  url: string;
+  title: string;
+  wordCount: number;
+  headings: string[];
+  keyPoints: string[];
+  uniqueAngles: string[];
+  strengthWeakness: {
+    strengths: string[];
+    weaknesses: string[];
+  };
+  contentGaps: string[];
+}
+
+// Database Views Interface
+export interface DatabaseViews {
+  project_performance: {
+    Row: {
+      project_id: string;
+      total_keywords: number;
+      average_position: number;
+      content_score: number;
+      technical_score: number;
+      last_updated: string;
+    };
+  };
+  content_metrics: {
+    Row: {
+      content_id: string;
+      project_id: string;
+      url: string;
+      performance_score: number;
+      engagement_rate: number;
+      conversion_rate: number;
+      last_updated: string;
+    };
+  };
+  keyword_trends: {
+    Row: {
+      keyword_id: string;
+      project_id: string;
+      keyword: string;
+      position_history: number[];
+      trend_direction: 'up' | 'down' | 'stable';
+      last_updated: string;
+    };
+  };
+}
+
+// Database Functions Interface
+export interface DatabaseFunctions {
+  calculate_project_metrics: {
+    Args: {
+      p_project_id: string;
+    };
+    Returns: {
+      total_keywords: number;
+      average_position: number;
+      content_score: number;
+      technical_score: number;
+    };
+  };
+  analyze_keyword_trends: {
+    Args: {
+      p_keyword_id: string;
+      p_date_range: number;
+    };
+    Returns: {
+      trend_direction: 'up' | 'down' | 'stable';
+      position_change: number;
+      volatility_score: number;
+    };
+  };
+  generate_seo_report: {
+    Args: {
+      p_project_id: string;
+      p_start_date: string;
+      p_end_date: string;
+    };
+    Returns: Record<string, number | string>[];
+  };
+}
+
 // Define our own Database type for Supabase
 export type Database = {
   public: {
@@ -122,7 +290,7 @@ export type Database = {
           created_at: string;
           keyword_id: string;
           search_intent: string | null;
-          serp_analysis: Record<string, any> | null;
+          serp_analysis: SerpAnalysis | null;
           competing_domains: string[] | null;
           content_recommendations: string[] | null;
         };
@@ -131,7 +299,7 @@ export type Database = {
           created_at?: string;
           keyword_id: string;
           search_intent?: string | null;
-          serp_analysis?: Record<string, any> | null;
+          serp_analysis?: SerpAnalysis | null;
           competing_domains?: string[] | null;
           content_recommendations?: string[] | null;
         };
@@ -140,7 +308,7 @@ export type Database = {
           created_at?: string;
           keyword_id?: string;
           search_intent?: string | null;
-          serp_analysis?: Record<string, any> | null;
+          serp_analysis?: SerpAnalysis | null;
           competing_domains?: string[] | null;
           content_recommendations?: string[] | null;
         };
@@ -235,27 +403,27 @@ export type Database = {
           id: string;
           created_at: string;
           content_page_id: string;
-          readability_analysis: Record<string, any> | null;
-          keyword_analysis: Record<string, any> | null;
-          structure_analysis: Record<string, any> | null;
+          readability_analysis: ReadabilityAnalysis | null;
+          keyword_analysis: KeywordAnalysisResult | null;
+          structure_analysis: StructureAnalysis | null;
           overall_score: number;
         };
         Insert: {
           id?: string;
           created_at?: string;
           content_page_id: string;
-          readability_analysis?: Record<string, any> | null;
-          keyword_analysis?: Record<string, any> | null;
-          structure_analysis?: Record<string, any> | null;
+          readability_analysis?: ReadabilityAnalysis | null;
+          keyword_analysis?: KeywordAnalysisResult | null;
+          structure_analysis?: StructureAnalysis | null;
           overall_score: number;
         };
         Update: {
           id?: string;
           created_at?: string;
           content_page_id?: string;
-          readability_analysis?: Record<string, any> | null;
-          keyword_analysis?: Record<string, any> | null;
-          structure_analysis?: Record<string, any> | null;
+          readability_analysis?: ReadabilityAnalysis | null;
+          keyword_analysis?: KeywordAnalysisResult | null;
+          structure_analysis?: StructureAnalysis | null;
           overall_score?: number;
         };
       };
@@ -330,9 +498,9 @@ export type Database = {
           title: string;
           target_keyword: string;
           secondary_keywords: string[] | null;
-          outline: Record<string, any> | null;
+          outline: ContentBriefOutline | null;
           research_notes: string | null;
-          competitor_insights: Record<string, any>[] | null;
+          competitor_insights: CompetitorInsight[] | null;
         };
         Insert: {
           id?: string;
@@ -343,9 +511,9 @@ export type Database = {
           title: string;
           target_keyword: string;
           secondary_keywords?: string[] | null;
-          outline?: Record<string, any> | null;
+          outline?: ContentBriefOutline | null;
           research_notes?: string | null;
-          competitor_insights?: Record<string, any>[] | null;
+          competitor_insights?: CompetitorInsight[] | null;
         };
         Update: {
           id?: string;
@@ -356,9 +524,9 @@ export type Database = {
           title?: string;
           target_keyword?: string;
           secondary_keywords?: string[] | null;
-          outline?: Record<string, any> | null;
+          outline?: ContentBriefOutline | null;
           research_notes?: string | null;
-          competitor_insights?: Record<string, any>[] | null;
+          competitor_insights?: CompetitorInsight[] | null;
         };
       };
 
@@ -393,9 +561,9 @@ export type Database = {
       };
     };
 
-    Views: {};
+    Views: DatabaseViews;
 
-    Functions: {};
+    Functions: DatabaseFunctions;
   };
 };
 
@@ -415,4 +583,4 @@ export type ContentAnalysis = Database['public']['Tables']['content_analysis']['
 export type ContentSuggestion = Database['public']['Tables']['content_suggestions']['Row'];
 export type TopicCluster = Database['public']['Tables']['topic_clusters']['Row'];
 export type ContentBrief = Database['public']['Tables']['content_briefs']['Row'];
-export type CompetitorContent = Database['public']['Tables']['competitor_content']['Row']; 
+export type CompetitorContent = Database['public']['Tables']['competitor_content']['Row'];

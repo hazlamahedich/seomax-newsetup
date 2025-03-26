@@ -1,16 +1,33 @@
-import { createClient } from '@/lib/supabase/client';
-import { SiteCrawlerService } from './SiteCrawlerService';
+import { createClient } from '@/lib/supabase/server';
 import { CrawleeService } from './CrawleeService';
+import { TechnicalSEOService } from './TechnicalSEOService';
+import { ContentAnalyzerService } from './ContentAnalyzerService';
 import { ImageOptimizationService } from './ImageOptimizationService';
 import { DuplicateContentService } from './DuplicateContentService';
 import { SchemaMarkupService } from './SchemaMarkupService';
 import { CoreWebVitalsService } from './CoreWebVitalsService';
-import { ContentAnalyzerService } from './ContentAnalyzerService';
 import { GradingSystemService } from './GradingSystemService';
 import { BacklinkAnalysisService } from './BacklinkAnalysisService';
 import { SocialMediaAnalysisService } from './SocialMediaAnalysisService';
-import { TechnicalSEOService } from './TechnicalSEOService';
 import { LighthouseService } from './LighthouseService';
+import { PerformanceService } from './PerformanceService';
+import { ImageService } from './ImageService';
+
+export interface SEOIssue {
+  type: string;
+  severity: 'critical' | 'warning' | 'info';
+  message: string;
+  url: string;
+  details?: string;
+}
+
+export interface AuditOptions {
+  crawlLimit: number;
+  includeImages: boolean;
+  includePerformance: boolean;
+  includeContent: boolean;
+  includeDuplicates: boolean;
+}
 
 export interface AdvancedSEOAuditResult {
   siteCrawlId: string;
@@ -18,13 +35,32 @@ export interface AdvancedSEOAuditResult {
   performanceScore: number;
   contentScore: number;
   technicalScore: number;
-  onPageScore: number;
+  backlinksScore: number;
+  socialScore: number;
   overallScore: number;
-  criticalIssues: number;
-  warnings: number;
-  improvements: number;
-  completed: boolean;
-  createdAt: string;
+  issues: SEOIssue[];
+  recommendations: string[];
+  affectedUrls: string[];
+}
+
+export interface TechnicalSEOIssue {
+  type: string;
+  severity: 'critical' | 'warning' | 'info';
+  message: string;
+  url: string;
+  details?: string;
+}
+
+export interface ContentAnalysisResult {
+  score: number;
+  issues: SEOIssue[];
+  recommendations: string[];
+}
+
+export interface TechnicalSEOResult {
+  score: number;
+  issues: TechnicalSEOIssue[];
+  recommendations: string[];
 }
 
 export interface SEOAuditSummary {
@@ -62,164 +98,119 @@ export interface SEOCategory {
   summary: string;
 }
 
-export interface SEOIssue {
-  id: string;
-  type: string;
-  severity: string;
-  description: string;
-  recommendation: string;
-  affectedUrls: string[];
-}
-
 export class AdvancedSEOAnalyzerService {
-  private static supabase = createClient();
-  
-  /**
-   * Run a complete SEO audit including all advanced analysis
-   */
-  static async runAdvancedAudit(siteId: string, url: string): Promise<AdvancedSEOAuditResult> {
+  static async runAdvancedAudit(auditId: string, siteUrl: string, options: AuditOptions): Promise<AdvancedSEOAuditResult> {
     try {
+      const supabase = createClient();
+      
       // Initial audit result - will be updated as processes complete
       const initialAuditResult: AdvancedSEOAuditResult = {
         siteCrawlId: '',
-        url,
+        url: siteUrl,
         performanceScore: 0,
         contentScore: 0,
         technicalScore: 0,
-        onPageScore: 0,
+        backlinksScore: 0,
+        socialScore: 0,
         overallScore: 0,
-        criticalIssues: 0,
-        warnings: 0,
-        improvements: 0,
-        completed: false,
-        createdAt: new Date().toISOString()
+        issues: [],
+        recommendations: [],
+        affectedUrls: []
       };
-      
-      // Store the initial result to get an ID
-      const { data: initialData, error: initialError } = await this.supabase
-        .from('advanced_seo_audits')
-        .insert(initialAuditResult)
-        .select()
-        .single();
-      
-      if (initialError) throw initialError;
-      
-      const auditId = initialData.id;
-      
-      // Create a new crawl session
-      const { data: crawlData, error: crawlError } = await this.supabase
+
+      // Create a site crawl record
+      const { data: siteCrawl } = await supabase
         .from('site_crawls')
         .insert({
-          project_id: siteId,
-          user_id: 'system', // System crawl
+          audit_id: auditId,
           status: 'pending',
-          is_enhanced: true, // Mark as an enhanced crawl
-          js_rendering_enabled: true, // Enable JavaScript rendering
+          url: siteUrl,
+          options: options
         })
         .select()
         .single();
-        
-      if (crawlError) throw crawlError;
-      
-      const siteCrawlId = crawlData.id;
-      
-      // Update the audit with the crawl ID
-      const partialUpdate = {
-        site_crawl_id: siteCrawlId
-      };
-      
-      await this.supabase
-        .from('advanced_seo_audits')
-        .update(partialUpdate)
-        .eq('id', auditId);
-      
-      // Start the crawling process using CrawleeService
-      // This gives us better JavaScript rendering capabilities
-      await CrawleeService.crawlWebsite(siteCrawlId, url, {
-        maxPages: 25, // Limit to 25 pages
+
+      if (!siteCrawl) {
+        throw new Error('Failed to create site crawl record');
+      }
+
+      const siteCrawlId = siteCrawl.id;
+      initialAuditResult.siteCrawlId = siteCrawlId;
+
+      // Start the crawling process
+      await CrawleeService.crawlWebsite(siteCrawlId, siteUrl, {
+        maxPages: options.crawlLimit,
         maxDepth: 3,
-        followExternalLinks: false,
-        respectRobotsTxt: true
+        followExternalLinks: false
+      });
+
+      // Run technical SEO analysis
+      const technicalResult = await TechnicalSEOService.analyzeTechnicalSEO(siteCrawlId, siteUrl, {
+        checkSsl: true,
+        checkRobotsTxt: true,
+        checkSitemap: true
       });
       
-      // Run all analyses in parallel
-      const analyzePromises = [
-        this.analyzePerformance(siteCrawlId),
-        this.analyzeContent(siteCrawlId),
-        this.analyzeTechnicalSEO(siteCrawlId),
-        this.analyzeOnPageSEO(siteCrawlId)
+      // Run content analysis if enabled
+      let contentResult: ContentAnalysisResult = { score: 0, issues: [], recommendations: [] };
+      if (options.includeContent) {
+        const result = await ContentAnalyzerService.analyzeContent(siteCrawlId, siteUrl, {
+          checkReadability: true,
+          checkKeywords: true,
+          checkStructure: true
+        });
+        if (result) {
+          contentResult = result;
+        }
+      }
+
+      // Calculate overall score
+      const scores = [
+        technicalResult.score,
+        options.includeContent ? contentResult.score : 100
       ];
-      
-      const [
-        performanceResult,
-        contentResult,
-        technicalResult,
-        onPageResult
-      ] = await Promise.all(analyzePromises);
-      
-      // Calculate overall score and issue counts
-      const overallScore = Math.round(
-        (performanceResult.score * 0.25) +
-        (contentResult.score * 0.3) +
-        (technicalResult.score * 0.25) +
-        (onPageResult.score * 0.2)
-      );
-      
-      const criticalIssues = 
-        performanceResult.criticalIssues +
-        contentResult.criticalIssues +
-        technicalResult.criticalIssues +
-        onPageResult.criticalIssues;
-      
-      const warnings = 
-        performanceResult.warnings +
-        contentResult.warnings +
-        technicalResult.warnings +
-        onPageResult.warnings;
-      
-      const improvements = 
-        performanceResult.improvements +
-        contentResult.improvements +
-        technicalResult.improvements +
-        onPageResult.improvements;
-      
-      // Final audit result
-      const finalResult: AdvancedSEOAuditResult = {
-        siteCrawlId,
-        url,
-        performanceScore: performanceResult.score,
-        contentScore: contentResult.score,
-        technicalScore: technicalResult.score,
-        onPageScore: onPageResult.score,
-        overallScore,
-        criticalIssues,
-        warnings,
-        improvements,
-        completed: true,
-        createdAt: new Date().toISOString()
-      };
-      
-      // Update the audit with final results
-      await this.supabase
-        .from('advanced_seo_audits')
+
+      const overallScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+
+      // Update audit record with results
+      await supabase
+        .from('seo_audits')
         .update({
-          site_crawl_id: finalResult.siteCrawlId,
-          performance_score: finalResult.performanceScore,
-          content_score: finalResult.contentScore,
-          technical_score: finalResult.technicalScore,
-          on_page_score: finalResult.onPageScore,
-          overall_score: finalResult.overallScore,
-          critical_issues: finalResult.criticalIssues,
-          warnings: finalResult.warnings,
-          improvements: finalResult.improvements,
-          completed: finalResult.completed,
-          updated_at: finalResult.createdAt
+          status: 'completed',
+          overall_score: overallScore,
+          technical_score: technicalResult.score,
+          content_score: contentResult.score,
+          completed_at: new Date().toISOString()
         })
         .eq('id', auditId);
-      
-      return finalResult;
+
+      return {
+        ...initialAuditResult,
+        performanceScore: 0,
+        contentScore: contentResult.score,
+        technicalScore: technicalResult.score,
+        overallScore,
+        issues: [
+          ...technicalResult.issues.map((issue: TechnicalSEOIssue): SEOIssue => ({
+            type: issue.type,
+            severity: issue.severity,
+            message: issue.message,
+            url: issue.url,
+            details: issue.details
+          })),
+          ...contentResult.issues
+        ],
+        recommendations: [
+          ...technicalResult.recommendations,
+          ...contentResult.recommendations
+        ],
+        affectedUrls: Array.from(new Set([
+          ...technicalResult.issues.map(issue => issue.url),
+          ...contentResult.issues.map(issue => issue.url)
+        ]))
+      };
     } catch (error) {
-      console.error('Error running advanced SEO audit:', error);
+      console.error('Error in runAdvancedAudit:', error);
       throw error;
     }
   }
@@ -661,13 +652,12 @@ export class AdvancedSEOAnalyzerService {
         performanceScore: data.performance_score,
         contentScore: data.content_score,
         technicalScore: data.technical_score,
-        onPageScore: data.on_page_score,
+        backlinksScore: data.backlinks_score,
+        socialScore: data.social_score,
         overallScore: data.overall_score,
-        criticalIssues: data.critical_issues,
-        warnings: data.warnings,
-        improvements: data.improvements,
-        completed: data.completed,
-        createdAt: data.created_at
+        issues: data.issues,
+        recommendations: data.recommendations,
+        affectedUrls: data.affected_urls,
       };
     } catch (error) {
       console.error('Error getting audit results:', error);
@@ -717,13 +707,12 @@ export class AdvancedSEOAnalyzerService {
         performanceScore: audit.performance_score,
         contentScore: audit.content_score,
         technicalScore: audit.technical_score,
-        onPageScore: audit.on_page_score,
+        backlinksScore: audit.backlinks_score,
+        socialScore: audit.social_score,
         overallScore: audit.overall_score,
-        criticalIssues: audit.critical_issues,
-        warnings: audit.warnings,
-        improvements: audit.improvements,
-        completed: audit.completed,
-        createdAt: audit.created_at
+        issues: audit.issues,
+        recommendations: audit.recommendations,
+        affectedUrls: audit.affected_urls,
       }));
     } catch (error) {
       console.error('Error getting recent audits:', error);
@@ -1121,24 +1110,20 @@ export class AdvancedSEOAnalyzerService {
       // Process each performance metric and create issues
       if (data.lcp > 2.5) {
         issues.push({
-          id: `perf_lcp_${data.page_id}`,
           type: 'performance_lcp',
           severity: data.lcp > 4.0 ? 'critical' : 'warning',
-          description: `Slow Largest Contentful Paint (${data.lcp.toFixed(2)}s)`,
-          recommendation: 'Optimize critical rendering path and largest page elements',
-          affectedUrls: [data.url],
+          message: `Slow Largest Contentful Paint (${data.lcp.toFixed(2)}s)`,
+          url: data.url,
         });
       }
       
       // Similarly for other metrics (simplified for brevity)
       if (data.cls > 0.1) {
         issues.push({
-          id: `perf_cls_${data.page_id}`,
           type: 'performance_cls',
           severity: data.cls > 0.25 ? 'critical' : 'warning',
-          description: `High Cumulative Layout Shift (${data.cls.toFixed(2)})`,
-          recommendation: 'Fix layout shifts by setting explicit dimensions for dynamic content',
-          affectedUrls: [data.url],
+          message: `High Cumulative Layout Shift (${data.cls.toFixed(2)})`,
+          url: data.url,
         });
       }
       
@@ -1165,12 +1150,11 @@ export class AdvancedSEOAnalyzerService {
       if (data.issues && Array.isArray(data.issues)) {
         // Map the issues to our SEOIssue format
         const technicalIssues = data.issues.map((issue: any) => ({
-          id: `tech_${issue.id || Math.random().toString(36).substring(2, 10)}`,
           type: issue.type || 'technical',
           severity: issue.severity || 'medium',
-          description: issue.description,
-          recommendation: issue.recommendation,
-          affectedUrls: issue.affectedUrls || [],
+          message: issue.description,
+          url: issue.url || '',
+          details: issue.recommendation,
         }));
         
         issues.push(...technicalIssues);
@@ -1179,45 +1163,37 @@ export class AdvancedSEOAnalyzerService {
       // Handle specific technical checks
       if (data.robotsTxt && !data.robotsTxt.valid) {
         issues.push({
-          id: `tech_robots_${data.id || Math.random().toString(36).substring(2, 10)}`,
           type: 'robots_txt',
           severity: 'critical',
-          description: 'Invalid or missing robots.txt file',
-          recommendation: 'Create or fix your robots.txt file to control search engine access',
-          affectedUrls: [data.domain || ''],
+          message: 'Invalid or missing robots.txt file',
+          url: data.domain || '',
         });
       }
       
       if (data.sitemap && !data.sitemap.valid) {
         issues.push({
-          id: `tech_sitemap_${data.id || Math.random().toString(36).substring(2, 10)}`,
           type: 'sitemap',
           severity: 'high',
-          description: 'Invalid or missing XML sitemap',
-          recommendation: 'Create or fix your sitemap.xml file to help search engines crawl your site',
-          affectedUrls: [data.domain || ''],
+          message: 'Invalid or missing XML sitemap',
+          url: data.domain || '',
         });
       }
       
       if (data.ssl && !data.ssl.valid) {
         issues.push({
-          id: `tech_ssl_${data.id || Math.random().toString(36).substring(2, 10)}`,
           type: 'ssl',
           severity: 'critical',
-          description: 'Invalid or missing SSL certificate',
-          recommendation: 'Install a valid SSL certificate to secure your website and improve SEO',
-          affectedUrls: [data.domain || ''],
+          message: 'Invalid or missing SSL certificate',
+          url: data.domain || '',
         });
       }
       
       if (data.mobileCompatibility && !data.mobileCompatibility.compatible) {
         issues.push({
-          id: `tech_mobile_${data.id || Math.random().toString(36).substring(2, 10)}`,
           type: 'mobile_friendly',
           severity: 'high',
-          description: 'Website is not mobile-friendly',
-          recommendation: 'Optimize your website for mobile devices to improve user experience and SEO',
-          affectedUrls: [data.domain || ''],
+          message: 'Website is not mobile-friendly',
+          url: data.domain || '',
         });
       }
       
@@ -1415,8 +1391,8 @@ export class AdvancedSEOAnalyzerService {
           id: `backlink-${index}`,
           type: 'backlink',
           severity,
-          description: recommendation,
-          recommendation: recommendation,
+          message: recommendation,
+          url: recommendation,
           impact: 'Affects overall backlink profile strength',
         };
       });
@@ -1512,8 +1488,8 @@ export class AdvancedSEOAnalyzerService {
           id: `social-${index}`,
           type: 'social_media',
           severity,
-          description: recommendation,
-          recommendation: recommendation,
+          message: recommendation,
+          url: recommendation,
           impact: 'Affects social media effectiveness and brand visibility',
         };
       });
