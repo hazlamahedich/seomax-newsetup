@@ -665,4 +665,68 @@ We're enhancing SEOMax with advanced AI-powered features that provide deeper ins
 ## Active Decisions
 - Using admin client with service role token only for specific operations requiring RLS bypass
 - Implementing progressive enhancement for data access: try with regular client first, fallback to admin client
-- Maintaining dual authentication system while ensuring user source tracking 
+- Maintaining dual authentication system while ensuring user source tracking
+
+### Content Analysis System Enhancement
+We've recently enhanced the content analysis system with several key improvements:
+
+1. **PDF Export Feature**
+   - Created new ContentAnalysisPdfButton component for UI integration
+   - Implemented ContentAnalysisPDFService for generating PDF reports
+   - Added server-side PDF generation using Puppeteer
+   - Built TypeScript test script for verifying PDF generation
+   - Created API endpoint for PDF storage in Supabase
+
+2. **LLM Integration Fixes**
+   - Resolved token calculation errors with fallback mechanisms
+   - Improved error handling for model invocation failures
+   - Enhanced LiteLLMProvider with better configuration management
+   - Added comprehensive logging for model interactions
+
+3. **Prompt Template Improvements**
+   - Fixed syntax errors in multiple prompt templates
+   - Standardized input/output schema across templates
+   - Added validation for template structure
+   - Implemented robust parsing for different response formats
+
+4. **Frontend Data Structure Alignment**
+   - Fixed mismatches between API response structure and UI expectations
+   - Updated components to use correct data paths
+   - Added proper fallback values for all display fields
+   - Implemented comprehensive null/undefined checking
+
+5. **Passive Voice Analysis**
+   - Added passive voice percentage to readability analysis schema
+   - Updated prompt template to request passive voice detection
+   - Ensured schema and prompts match for consistent analysis
+   - Added database field for passive voice percentage
+
+## Recent Changes
+
+- Updated ContentAnalyzer component to handle various field mappings
+- Created TypeScript script `test-content-analysis-pdf.ts` for PDF testing
+- Added passive voice detection to readability analysis
+- Improved error handling throughout the content analysis service
+- Updated documentation to reflect architectural changes
+
+## Next Steps
+
+- Implement additional visualizations for content analysis metrics
+- Add comparative analysis between multiple versions of content
+- Enhance PDF reports with more detailed insights
+- Improve error handling for edge cases in content analysis
+- Create end-to-end tests for content analysis workflow
+
+## Active Decisions
+
+- Using Puppeteer for server-side PDF generation to handle complex layouts
+- Maintaining backward compatibility for field naming in API responses
+- Adding fallback mechanisms for all LLM interactions to ensure system resilience
+- Providing detailed documentation for troubleshooting common issues
+
+## Technical Considerations
+
+- Need to monitor LLM costs and response times
+- Must handle potential token limit issues with very large content
+- Should consider caching mechanisms for frequent analyses
+- Need to ensure PDF generation process is scalable for high traffic 
