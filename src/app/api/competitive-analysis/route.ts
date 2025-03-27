@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CompetitorAnalysisService } from '@/lib/services/CompetitorAnalysisService';
 import { createClient } from '@/lib/supabase/client';
+import { createAdminClient } from '@/lib/supabase/admin-client';
 
 /**
  * GET /api/competitive-analysis?projectId=<id>
@@ -178,7 +179,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Missing id parameter' }, { status: 400 });
     }
     
-    const supabase = createClient();
+    const supabase = createAdminClient();
     const { error } = await supabase
       .from('competitors')
       .delete()
@@ -192,5 +193,39 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('Error in DELETE /api/competitive-analysis:', error);
     return NextResponse.json({ error: 'Failed to delete competitor' }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH /api/competitive-analysis
+ * Test URL validation
+ * Body: { url: string }
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { url } = body;
+    
+    if (!url) {
+      return NextResponse.json(
+        { error: 'URL is required' },
+        { status: 400 }
+      );
+    }
+    
+    console.log(`[API] Testing URL validation for: ${url}`);
+    
+    const validationResult = await CompetitorAnalysisService.validateUrlStorage(url);
+    
+    return NextResponse.json({ 
+      success: true, 
+      validation: validationResult
+    });
+  } catch (error) {
+    console.error('[API] Error in URL validation:', error);
+    return NextResponse.json(
+      { error: 'Internal server error', details: String(error) },
+      { status: 500 }
+    );
   }
 } 

@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/client";
+import { createAdminClient } from "@/lib/supabase/admin-client";
 import { scrapeUrl, ScrapedContent } from "@/lib/services/ScraperService";
 import { WebsiteMetricsService } from "@/lib/services/WebsiteMetricsService";
-import { LiteLLMProvider } from '@/lib/ai/litellm-provider';
+import { liteLLMProvider } from '@/lib/ai/litellm-provider';
+import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 
 // Interface for competitor data
 export interface CompetitorData {
@@ -51,6 +53,7 @@ export interface ContentGap {
   relevance: string; // 'high', 'medium', 'low'
   suggestedImplementation: string;
   competitorsCovering: number;
+  actionable?: boolean;
 }
 
 // Interface for competitor keywords
@@ -91,63 +94,318 @@ interface ContentMetrics {
 }
 
 export class CompetitorAnalysisService {
-  private static supabase = createClient();
+  private static supabase = createAdminClient();
 
-  // Add liteLLMProvider reference
-  private static readonly liteLLMProvider = {
-    generate: async ({ prompt, max_tokens, temperature, model }: { prompt: string, max_tokens: number, temperature: number, model: string }) => {
-      console.log(`[CompetitorAnalysisService] Mock LiteLLM provider call with model: ${model}`);
+  /**
+   * Normalize a URL to ensure consistent formatting and storage
+   * This enhanced version handles various edge cases and ensures URLs are consistently matched
+   */
+  static normalizeUrl(url: string): string {
+    if (!url) return '';
+    
+    try {
+      // Trim whitespace
+      let normalizedUrl = url.trim();
       
-      try {
-        // Get the API base URL correctly for both client and server environments
-        const baseUrl = typeof window !== 'undefined' 
-          ? window.location.origin 
-          : process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+      // Ensure URL has a protocol
+      if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+        normalizedUrl = 'https://' + normalizedUrl;
+      }
+      
+      // Use URL parser to properly handle all URL components
+      const parsedUrl = new URL(normalizedUrl);
+      
+      // Normalize hostname to lowercase (domain names are case-insensitive)
+      parsedUrl.hostname = parsedUrl.hostname.toLowerCase();
+      
+      // Preserve path case (paths can be case-sensitive)
+      // But ensure trailing slashes are consistent - we'll keep them for root domains
+      if (parsedUrl.pathname === '/' || parsedUrl.pathname === '') {
+        parsedUrl.pathname = '/';
+      } else if (parsedUrl.pathname.endsWith('/') && parsedUrl.pathname.length > 1) {
+        // Remove trailing slash for non-root paths
+        parsedUrl.pathname = parsedUrl.pathname.slice(0, -1);
+      }
+      
+      // Remove default ports
+      if ((parsedUrl.protocol === 'http:' && parsedUrl.port === '80') || 
+          (parsedUrl.protocol === 'https:' && parsedUrl.port === '443')) {
+        parsedUrl.port = '';
+      }
+      
+      // Standardize to https for common domains unless explicitly http
+      if (parsedUrl.protocol === 'http:' && !url.startsWith('http://')) {
+        parsedUrl.protocol = 'https:';
+      }
+      
+      // Sort query parameters for consistent ordering
+      if (parsedUrl.search) {
+        const searchParams = new URLSearchParams(parsedUrl.search);
+        const sortedParams = new URLSearchParams();
         
-        console.log(`[CompetitorAnalysisService] Using API endpoint ${baseUrl}/api/ai/generate`);
+        // Sort params by key
+        Array.from(searchParams.keys())
+          .sort()
+          .forEach(key => {
+            const values = searchParams.getAll(key);
+            values.forEach(value => sortedParams.append(key, value));
+          });
         
-        // Call the API
-        const response = await fetch(`${baseUrl}/api/ai/generate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt,
-            max_tokens,
-            temperature,
-            model,
-          }),
-          signal: AbortSignal.timeout(30000), // 30 second timeout
+        parsedUrl.search = sortedParams.toString() ? `?${sortedParams.toString()}` : '';
+      }
+      
+      // Remove common tracking parameters
+      const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid'];
+      if (parsedUrl.search) {
+        const searchParams = new URLSearchParams(parsedUrl.search);
+        let modified = false;
+        
+        trackingParams.forEach(param => {
+          if (searchParams.has(param)) {
+            searchParams.delete(param);
+            modified = true;
+          }
         });
         
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+        if (modified) {
+          parsedUrl.search = searchParams.toString() ? `?${searchParams.toString()}` : '';
         }
-        
-        const data = await response.json();
-        
-        return {
-          generations: [
-            {
-              text: data.content || "{}"
-            }
-          ]
-        };
-      } catch (error) {
-        console.error(`[CompetitorAnalysisService] Error in LiteLLM provider:`, error);
-        throw error;
+      }
+      
+      // Convert back to string
+      normalizedUrl = parsedUrl.toString();
+      
+      // Security check to prevent excessively long URLs
+      if (normalizedUrl.length > 2000) {
+        console.warn(`[CompetitorAnalysisService] URL exceeds 2000 chars, truncating: ${normalizedUrl.substring(0, 50)}...`);
+        normalizedUrl = normalizedUrl.substring(0, 2000);
+      }
+      
+      return normalizedUrl;
+    } catch (error) {
+      console.error(`[CompetitorAnalysisService] Error normalizing URL: ${url}`, error);
+      // Return original URL if normalization fails
+      return url;
+    }
+  }
+
+  /**
+   * Calculate similarity between two URL paths (0-1 scale)
+   * @private
+   */
+  private static calculatePathSimilarity(path1: string, path2: string): number {
+    // Remove trailing slashes for comparison
+    if (path1.endsWith('/')) path1 = path1.slice(0, -1);
+    if (path2.endsWith('/')) path2 = path2.slice(0, -1);
+    
+    // If both are just root path
+    if ((path1 === '' || path1 === '/') && (path2 === '' || path2 === '/')) {
+      return 1.0;
+    }
+    
+    // Split into segments
+    const segments1 = path1.split('/').filter(Boolean);
+    const segments2 = path2.split('/').filter(Boolean);
+    
+    // If one is empty and the other isn't
+    if ((segments1.length === 0 && segments2.length > 0) || 
+        (segments2.length === 0 && segments1.length > 0)) {
+      return 0.0;
+    }
+    
+    // Count matching segments
+    const maxSegments = Math.max(segments1.length, segments2.length);
+    if (maxSegments === 0) return 1.0; // Both empty
+    
+    let matchingSegments = 0;
+    for (let i = 0; i < Math.min(segments1.length, segments2.length); i++) {
+      // Case-insensitive comparison for paths
+      if (segments1[i].toLowerCase() === segments2[i].toLowerCase()) {
+        matchingSegments++;
       }
     }
-  };
+    
+    return matchingSegments / maxSegments;
+  }
+
+  /**
+   * Find content page using flexible URL matching with multiple fallback strategies
+   * This addresses the issue of exact URL matches failing despite URLs appearing identical
+   */
+  static async findContentPageByUrl(url: string): Promise<{ contentPage: any; exact: boolean } | null> {
+    if (!url) return null;
+    
+    try {
+      // Normalize URL for consistent lookup
+      const normalizedUrl = this.normalizeUrl(url);
+      console.log(`[CompetitorAnalysisService] Finding content page for normalized URL: ${normalizedUrl}`);
+      
+      // Use admin client for this query to bypass RLS
+      const adminClient = createAdminClient();
+      
+      // Original URL variations to try
+      const urlVariations = [
+        normalizedUrl, 
+        url,
+        normalizedUrl.replace(/\/$/, ''),  // Without trailing slash
+        normalizedUrl.endsWith('/') ? normalizedUrl : `${normalizedUrl}/` // With trailing slash
+      ].filter(Boolean);
+      
+      // De-duplicate variations
+      const uniqueVariations = [...new Set(urlVariations)];
+      
+      // 1. First try exact match with each variation
+      for (const urlVariant of uniqueVariations) {
+        try {
+          const { data, error } = await adminClient
+            .from('content_pages')
+            .select('*')
+            .eq('url', urlVariant)
+            .maybeSingle();
+          
+          if (data) {
+            console.log(`[CompetitorAnalysisService] Found exact URL match: ${data.url}`);
+            return { contentPage: data, exact: true };
+          }
+        } catch (err) {
+          console.log(`[CompetitorAnalysisService] Error in exact match for ${urlVariant}, continuing to next variation`);
+        }
+      }
+      
+      // 2. Try case-insensitive match with ILIKE
+      try {
+        console.log(`[CompetitorAnalysisService] Trying case-insensitive match for: ${normalizedUrl}`);
+        
+        // Create an exact pattern by escaping special characters
+        const escapedUrl = normalizedUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        const { data, error } = await adminClient
+          .from('content_pages')
+          .select('*')
+          .ilike('url', escapedUrl)
+          .maybeSingle();
+        
+        if (data) {
+          console.log(`[CompetitorAnalysisService] Found case-insensitive match: ${data.url}`);
+          return { contentPage: data, exact: false };
+        }
+      } catch (err) {
+        console.log('[CompetitorAnalysisService] Error in case-insensitive match, continuing to next strategy');
+      }
+      
+      // 3. Try domain-only matching as fallback
+      try {
+        // Extract domain for partial matching
+        let domain = '';
+        try {
+          const parsedUrl = new URL(normalizedUrl);
+          domain = parsedUrl.hostname;
+        } catch (err) {
+          // If URL parsing fails, use original URL
+          domain = normalizedUrl.split('/')[0];
+        }
+        
+        if (domain) {
+          console.log(`[CompetitorAnalysisService] Trying domain-only matching for: ${domain}`);
+          
+          const { data, error } = await adminClient
+            .from('content_pages')
+            .select('*')
+            .ilike('url', `%${domain}%`)
+            .order('created_at', { ascending: false });
+          
+          if (data && data.length > 0) {
+            console.log(`[CompetitorAnalysisService] Found ${data.length} URLs with domain: ${domain}`);
+            
+            // First look for similar paths
+            const parsedNormalizedUrl = new URL(normalizedUrl);
+            const normalizedPath = parsedNormalizedUrl.pathname;
+            
+            let bestMatch = null;
+            let bestScore = -1;
+            
+            for (const page of data) {
+              try {
+                const candidateUrl = new URL(page.url);
+                const candidatePath = candidateUrl.pathname;
+                
+                // Path similarity check
+                const similarity = this.calculatePathSimilarity(
+                  String(normalizedPath || '/'), 
+                  String(candidatePath || '/')
+                );
+                
+                if (similarity > bestScore) {
+                  bestScore = similarity;
+                  bestMatch = page;
+                }
+              } catch (err) {
+                // Skip invalid URLs
+                continue;
+              }
+            }
+            
+            // Use best match if similarity is above threshold
+            if (bestMatch && bestScore > 0.5) {
+              console.log(`[CompetitorAnalysisService] Using best domain match with ${Math.round(bestScore * 100)}% path similarity: ${bestMatch.url}`);
+              return { contentPage: bestMatch, exact: false };
+            }
+            
+            // If no good path match, just use the first result
+            console.log(`[CompetitorAnalysisService] Using first domain match: ${data[0].url}`);
+            return { contentPage: data[0], exact: false };
+          }
+        }
+      } catch (err) {
+        console.log('[CompetitorAnalysisService] Error in domain matching, continuing to next strategy');
+      }
+      
+      // 4. Try direct DB query with more permissive approach as a last resort
+      try {
+        console.log(`[CompetitorAnalysisService] Trying direct DB query for any URL containing significant parts of: ${normalizedUrl}`);
+        
+        // Extract significant parts from URL
+        const urlParts = normalizedUrl
+          .replace(/https?:\/\//i, '')
+          .replace(/www\./i, '')
+          .split(/[/?&#]/)
+          .filter(part => part.length > 3)
+          .map(part => part.toLowerCase());
+        
+        if (urlParts.length > 0) {
+          // Try to find matches for each significant part
+          for (const part of urlParts) {
+            const { data, error } = await adminClient
+              .from('content_pages')
+              .select('*')
+              .ilike('url', `%${part}%`)
+              .limit(1);
+            
+            if (data && data.length > 0) {
+              console.log(`[CompetitorAnalysisService] Found match by URL fragment "${part}": ${data[0].url}`);
+              return { contentPage: data[0], exact: false };
+            }
+          }
+        }
+      } catch (err) {
+        console.log('[CompetitorAnalysisService] Error in URL fragment matching');
+      }
+      
+      // No matches found after trying all strategies
+      console.log(`[CompetitorAnalysisService] No matching content page found for URL after trying all strategies: ${normalizedUrl}`);
+      return null;
+    } catch (error) {
+      console.error(`[CompetitorAnalysisService] Error finding content page by URL: ${url}`, error);
+      return null;
+    }
+  }
 
   /**
    * Get competitors for a project
    */
   static async getCompetitors(projectId: string): Promise<CompetitorData[]> {
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase
+      const { data, error } = await this.supabase
         .from('competitors')
         .select('*')
         .eq('project_id', projectId);
@@ -162,7 +420,7 @@ export class CompetitorAnalysisService {
         id: comp.id,
         projectId: comp.project_id,
         url: comp.url,
-        title: comp.title,
+        title: comp.title || comp.name,
         contentLength: comp.content_length,
         metrics: comp.metrics,
         domainMetrics: comp.domain_metrics,
@@ -291,18 +549,16 @@ export class CompetitorAnalysisService {
     try {
       console.log(`[CompetitorAnalysisService] Adding competitor for projectId ${projectId}, url: ${url}`);
       
-      // Create a more robust URL parser
-      let parsedUrl = url;
-      if (!url.startsWith('http')) {
-        parsedUrl = `https://${url}`;
-      }
+      // Normalize the URL to ensure consistent format
+      const normalizedUrl = this.normalizeUrl(url);
+      console.log(`[CompetitorAnalysisService] Using normalized URL: ${normalizedUrl}`);
       
       // Check if the competitor already exists
       const { data: existingCompetitors, error: existingError } = await this.supabase
         .from('competitors')
         .select('id')
         .eq('project_id', projectId)
-        .eq('url', parsedUrl);
+        .eq('url', normalizedUrl);
         
       if (existingError) {
         console.error('[CompetitorAnalysisService] Error checking for existing competitor:', existingError);
@@ -315,19 +571,19 @@ export class CompetitorAnalysisService {
       }
       
       // Scrape content from URL
-      console.log(`[CompetitorAnalysisService] Scraping content for ${parsedUrl}`);
-      const scrapedContent = await this.scrapeContent(parsedUrl);
+      console.log(`[CompetitorAnalysisService] Scraping content for ${normalizedUrl}`);
+      const scrapedContent = await this.scrapeContent(normalizedUrl);
       
       // Extract domain from URL
-      const domain = new URL(parsedUrl).hostname;
+      const domain = new URL(normalizedUrl).hostname;
       
       // If scraping failed, use fallback
       if (!scrapedContent || !scrapedContent.content) {
-        console.log(`[CompetitorAnalysisService] Scraping failed for ${parsedUrl}, using fallback values`);
+        console.log(`[CompetitorAnalysisService] Scraping failed for ${normalizedUrl}, using fallback values`);
         // Create a fallback with basic information
         const fallbackCompetitor: CompetitorData = {
           projectId,
-          url: parsedUrl,
+          url: normalizedUrl,
           title: domain,
           contentLength: 0,
           metrics: {
@@ -349,7 +605,7 @@ export class CompetitorAnalysisService {
           .from('competitors')
           .insert({
             project_id: projectId,
-            url: parsedUrl,
+            url: normalizedUrl,
             name: domain,
             metrics: fallbackCompetitor.metrics, // Store metrics directly in the competitors table
           })
@@ -408,7 +664,7 @@ export class CompetitorAnalysisService {
         .from('competitors')
         .insert({
           project_id: projectId,
-          url: parsedUrl,
+          url: normalizedUrl,
           name: competitorName,
           metrics: metrics, // Store metrics directly in the competitors table
         })
@@ -461,81 +717,98 @@ export class CompetitorAnalysisService {
   }
 
   /**
-   * Run content gap analysis for a content page against its competitors
+   * Run a competitive analysis for a URL
    */
   static async runCompetitiveAnalysis(projectId: string, url: string): Promise<CompetitiveAnalysisResult> {
     console.log(`[CompetitorAnalysisService] Running analysis for project ${projectId}, content URL: ${url}`);
     
     try {
-      // Get all competitors for the project
-      const competitors = await this.getCompetitors(projectId);
-      console.log(`[CompetitorAnalysisService] Found ${competitors.length} competitors for project ${projectId}`);
+      // Normalize URL for consistent matching
+      const normalizedUrl = this.normalizeUrl(url);
+      console.log(`[CompetitorAnalysisService] Normalized URL: ${normalizedUrl}`);
       
-      if (competitors.length === 0) {
-        console.log(`[CompetitorAnalysisService] No competitors found for project ${projectId}`);
-        return {
-          contentGaps: [],
-          keywordGaps: [],
-          advantages: [],
-          disadvantages: [],
-          strategies: [],
-          competitors: []
-        };
-      }
-
-      // Refresh all competitors' metrics first
-      console.log(`[CompetitorAnalysisService] Refreshing metrics for all competitors before analysis`);
-      const updatedCompetitors: CompetitorData[] = [];
-
-      for (const competitor of competitors) {
-        if (competitor.id) {
-          console.log(`[CompetitorAnalysisService] Refreshing metrics for competitor ${competitor.id}: ${competitor.url}`);
-          const refreshedCompetitor = await this.recalculateCompetitorMetrics(competitor.id);
-          if (refreshedCompetitor) {
-            updatedCompetitors.push(refreshedCompetitor);
-          }
-        }
-      }
-      
-      console.log(`[CompetitorAnalysisService] Successfully refreshed ${updatedCompetitors.length} competitors`);
-      
-      // Get the content page from the database
-      let contentPage;
-      try {
-        const { data, error } = await this.supabase
-          .from('content_pages')
-          .select('*')
-          .eq('url', url)
-          .single();
+      // Get competitors for this project
+      const { data: competitors, error: competitorError } = await this.supabase
+        .from('competitors')
+        .select('*')
+        .eq('project_id', projectId);
         
-        if (error) {
-          console.error(`[CompetitorAnalysisService] Error fetching content page: ${error.message}`);
-          
-          // If the error is "not found", create a basic content page object for analysis
-          if (error.code === 'PGRST116') {
-            console.log(`[CompetitorAnalysisService] Content page not found for URL: ${url}, creating fallback content object`);
-            contentPage = {
-              id: null,
-              url,
-              title: url.split('/').pop() || url,
-              content: '',
-              keywords: [],
-              metrics: {
-                wordCount: 0,
-                readabilityScore: 0,
-                keywordDensity: 0
-              }
-            };
+      if (competitorError) {
+        console.error(`[CompetitorAnalysisService] Error fetching competitors: ${competitorError.message}`);
+        throw new Error(`Failed to fetch competitors: ${competitorError.message}`);
+      }
+      
+      console.log(`[CompetitorAnalysisService] Found ${competitors.length} competitors`);
+      
+      // Map competitors to the expected data structure
+      let mappedCompetitors: CompetitorData[] = competitors.map(comp => ({
+        id: comp.id,
+        projectId: comp.project_id,
+        url: comp.url,
+        title: comp.name,
+        metrics: comp.metrics || {
+          wordCount: 0,
+          readabilityScore: 0,
+          keywordDensity: 0,
+          headingCount: 0,
+          imageCount: 0,
+          linkCount: 0,
+          paragraphCount: 0
+        },
+        strengths: [],
+        keywords: []
+      }));
+      
+      // Update competitors without metrics
+      const updatedCompetitors: CompetitorData[] = [];
+      for (const competitor of mappedCompetitors) {
+        if (!competitor.metrics || Object.keys(competitor.metrics).length === 0) {
+          console.log(`[CompetitorAnalysisService] Updating metrics for competitor: ${competitor.url}`);
+          if (competitor.id) {
+            const updatedCompetitor = await this.recalculateCompetitorMetrics(competitor.id);
+            if (updatedCompetitor) {
+              updatedCompetitors.push(updatedCompetitor);
+            } else {
+              updatedCompetitors.push(competitor);
+            }
           } else {
-            throw error;
+            console.log(`[CompetitorAnalysisService] Skipping metrics update for competitor with no ID: ${competitor.url}`);
+            updatedCompetitors.push(competitor);
           }
         } else {
-          contentPage = data;
-          console.log(`[CompetitorAnalysisService] Found content page: ${contentPage.title}`);
+          updatedCompetitors.push(competitor);
         }
-      } catch (error) {
-        console.error(`[CompetitorAnalysisService] Error fetching content page: ${error}`);
-        throw new Error(`Failed to fetch content page: ${error}`);
+      }
+      
+      // Get the content page from the database using enhanced flexible matching
+      let contentPage;
+      
+      // Use our new flexible URL finder
+      const contentPageMatch = await this.findContentPageByUrl(normalizedUrl);
+      
+      if (contentPageMatch) {
+        contentPage = contentPageMatch.contentPage;
+        
+        if (!contentPageMatch.exact) {
+          console.log(`[CompetitorAnalysisService] Found similar content page: ${contentPage.url} (not exact match)`);
+        } else {
+          console.log(`[CompetitorAnalysisService] Found exact content page match: ${contentPage.title}`);
+        }
+      } else {
+        // Create a fallback content page if none found
+        console.log(`[CompetitorAnalysisService] Content page not found for URL: ${normalizedUrl}, creating fallback content object`);
+        contentPage = {
+          id: null,
+          url: normalizedUrl,
+          title: normalizedUrl.split('/').pop() || normalizedUrl,
+          content: '',
+          keywords: [],
+          metrics: {
+            wordCount: 0,
+            readabilityScore: 0,
+            keywordDensity: 0
+          }
+        };
       }
       
       // Run the analysis with updated competitors
@@ -591,7 +864,9 @@ export class CompetitorAnalysisService {
         // Using URL patterns to generate basic content gaps
         result.contentGaps = [{
           topic: 'Basic page information',
+          description: 'Add fundamental page content to match competitors',
           relevance: '80',
+          suggestedImplementation: 'Create content that includes key information found on competitor pages',
           competitorsCovering: 3,
           actionable: true
         }];
@@ -666,7 +941,9 @@ export class CompetitorAnalysisService {
       if (contentPageWordCount < competitorAvgWordCount * 0.8) {
         result.contentGaps.push({
           topic: 'Content length',
+          description: 'Content is significantly shorter than competitor average',
           relevance: '90',
+          suggestedImplementation: 'Add more comprehensive information to increase content length',
           competitorsCovering: competitors.length,
           actionable: true
         });
@@ -747,7 +1024,9 @@ export class CompetitorAnalysisService {
       return {
         contentGaps: [{
           topic: 'Error in analysis',
+          description: 'An error occurred during the competitive analysis',
           relevance: '0',
+          suggestedImplementation: 'Try refreshing the page or analyzing again later',
           competitorsCovering: 0,
           actionable: false
         }],
@@ -1062,7 +1341,11 @@ export class CompetitorAnalysisService {
       }));
       
       // Create the analysis prompt
-      const prompt = `
+      const systemPrompt = `You are an expert SEO competitive analyst. Analyze the main content and competitor content 
+      to identify content gaps, keyword gaps, competitive advantages, and disadvantages. Provide strategic recommendations.
+      Format your response as detailed JSON.`;
+      
+      const userPrompt = `
         Perform a competitive content gap analysis between the main content and competitor content.
         
         MAIN CONTENT:
@@ -1080,7 +1363,9 @@ export class CompetitorAnalysisService {
           "contentGaps": [
             {
               "topic": "Topic name",
+              "description": "Detailed description of what competitors cover that is missing in main content",
               "relevance": 90, 
+              "suggestedImplementation": "Specific suggestions on how to implement this topic",
               "competitorCoverage": "high",
               "actionable": true
             }
@@ -1119,26 +1404,34 @@ export class CompetitorAnalysisService {
             }
           ]
         }
+        
+        Only return valid JSON, no other text or explanations.
       `;
       
-      // Use API client to send the request
-      console.log(`[CompetitorAnalysisService] Sending request to LLM API`);
+      // Use centralized liteLLMProvider to send the request
+      console.log(`[CompetitorAnalysisService] Getting LangChain model from liteLLMProvider`);
       
-      // Call LiteLLM API
-      const response = await this.liteLLMProvider.generate({
-        prompt,
-        max_tokens: 2000,
-        temperature: 0.3,
-        model: 'gpt-4'
-      });
+      // Get model from centralized provider
+      const model = await liteLLMProvider.getLangChainModel();
+      llmModel = model.modelName;
       
-      llmModel = 'gpt-4';
+      console.log(`[CompetitorAnalysisService] Using model: ${llmModel}`);
+      
+      // Create messages for the model
+      const systemMessage = new SystemMessage(systemPrompt);
+      const userMessage = new HumanMessage(userPrompt);
+      
+      // Call the model with the messages
+      const response = await model.invoke([systemMessage, userMessage]);
+      
       usedLLM = true;
       
       // Process the response
       let result;
-      if (response && response.generations && response.generations.length > 0) {
-        const text = response.generations[0].text;
+      if (response && response.content) {
+        const text = typeof response.content === 'string' 
+          ? response.content 
+          : JSON.stringify(response.content);
         
         // Extract JSON from the response
         const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -1164,7 +1457,9 @@ export class CompetitorAnalysisService {
       // Validate and convert types as needed
       result.contentGaps = result.contentGaps.map((gap: any) => ({
         topic: gap.topic || 'Unknown topic',
+        description: gap.description || `Content gap identified related to ${gap.topic}`,
         relevance: typeof gap.relevance === 'number' ? String(gap.relevance) : gap.relevance || '50',
+        suggestedImplementation: gap.suggestedImplementation || gap.implementation || `Add more comprehensive information about ${gap.topic}`,
         competitorsCovering: typeof gap.competitorsCovering === 'number' ? 
           gap.competitorsCovering : 
           (typeof gap.competitorCoverage === 'string' ? 
@@ -1248,17 +1543,60 @@ export class CompetitorAnalysisService {
    */
   private static async scrapeContent(url: string): Promise<{ title: string; content: string; htmlContent?: string } | null> {
     try {
-      console.log(`[CompetitorAnalysisService] Scraping content from ${url}`);
+      console.log(`[CompetitorAnalysisService] Scraping content from ${url} (length: ${url.length})`);
+      
+      // Normalize URL to ensure it's valid
+      const normalizedUrl = this.normalizeUrl(url);
+      console.log(`[CompetitorAnalysisService] Using normalized URL: ${normalizedUrl}`);
+      
+      // Set up fetch options with headers and timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
+      
+      const fetchOptions = {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 SEOMax Content Analyzer',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Connection': 'keep-alive',
+        },
+        signal: controller.signal
+      };
       
       // Simple fetch-based scraper
-      const response = await fetch(url);
+      const response = await fetch(normalizedUrl, fetchOptions)
+        .catch(error => {
+          if (error.name === 'AbortError') {
+            console.error(`[CompetitorAnalysisService] Request timeout after 30 seconds: ${normalizedUrl}`);
+          }
+          throw error;
+        })
+        .finally(() => {
+          clearTimeout(timeoutId);
+        });
       
-      if (!response.ok) {
-        console.error(`[CompetitorAnalysisService] Failed to fetch URL: ${url}, status: ${response.status}`);
+      if (!response || !response.ok) {
+        console.error(`[CompetitorAnalysisService] Failed to fetch URL: ${normalizedUrl}, status: ${response?.status || 'unknown'}`);
         return null;
       }
       
+      // Check content type to ensure it's HTML
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
+        console.warn(`[CompetitorAnalysisService] Non-HTML content type: ${contentType} for URL: ${normalizedUrl}`);
+        // Continue anyway, but log the warning
+      }
+      
+      // Get the HTML content
       const html = await response.text();
+      
+      if (!html || html.length < 100) {
+        console.error(`[CompetitorAnalysisService] Empty or very small HTML response: ${html.length} chars`);
+        return null;
+      }
+      
+      console.log(`[CompetitorAnalysisService] Successfully scraped content, HTML size: ${html.length} bytes`);
       
       // Extract title
       const titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/i);
@@ -1272,14 +1610,79 @@ export class CompetitorAnalysisService {
                         .trim();
       
       // Limit content length
+      const originalLength = content.length;
       if (content.length > 10000) {
         content = content.substring(0, 10000) + '...';
+        console.log(`[CompetitorAnalysisService] Content truncated from ${originalLength} to 10000 chars`);
       }
       
-      return { title, content, htmlContent: html };
+      return { 
+        title, 
+        content, 
+        htmlContent: html.length > 100000 ? html.substring(0, 100000) + '...' : html // Limit HTML size as well
+      };
     } catch (error) {
       console.error(`[CompetitorAnalysisService] Error scraping content from ${url}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Debug function to validate URL storage in the database
+   * Use this to check if URLs are being stored correctly
+   */
+  static async validateUrlStorage(url: string): Promise<{
+    originalUrl: string;
+    normalizedUrl: string;
+    storedUrl: string | null;
+    matchesExactly: boolean;
+    matchesNormalized: boolean;
+    urlLength: number;
+    normalizedLength: number;
+    storageError: string | null;
+  }> {
+    console.log(`[CompetitorAnalysisService] Validating URL storage for: ${url}`);
+    
+    // Normalize the URL
+    const normalizedUrl = this.normalizeUrl(url);
+    
+    // Use admin client for direct database access
+    const adminClient = createAdminClient();
+    
+    // Check if it exists in the database
+    const { data, error } = await adminClient
+      .from('content_pages')
+      .select('url')
+      .eq('url', normalizedUrl)
+      .maybeSingle();
+    
+    const storedUrl = data?.url || null;
+    
+    // Also try with the original URL if normalized is different
+    let exactMatchData = null;
+    if (url !== normalizedUrl) {
+      const { data: exactData } = await adminClient
+        .from('content_pages')
+        .select('url')
+        .eq('url', url)
+        .maybeSingle();
+      
+      exactMatchData = exactData;
+    }
+    
+    const result = {
+      originalUrl: url,
+      normalizedUrl: normalizedUrl,
+      storedUrl: storedUrl || (exactMatchData?.url || null),
+      matchesExactly: (exactMatchData?.url === url) || (storedUrl === url),
+      matchesNormalized: storedUrl === normalizedUrl,
+      urlLength: url.length,
+      normalizedLength: normalizedUrl.length,
+      storageError: error ? error.message : null
+    };
+    
+    console.log(`[CompetitorAnalysisService] URL validation result:`, result);
+    
+    return result;
   }
 } 
