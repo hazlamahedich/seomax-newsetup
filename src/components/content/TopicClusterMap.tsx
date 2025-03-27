@@ -43,7 +43,10 @@ export function TopicClusterMap({ projectId, clusterId, onCreateCluster }: Topic
   const [clusters, setClusters] = useState<TopicCluster[]>([]);
   const [mainKeyword, setMainKeyword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [hoveredSubtopic, setHoveredSubtopic] = useState<number | null>(null);
+  const [selectedSubtopic, setSelectedSubtopic] = useState<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const subtopicPositionsRef = useRef<Array<{index: number, x: number, y: number, radius: number}>>([]);
   
   // Use our custom hook to verify project access
   const projectAccess = useProjectAccess({ projectId });
@@ -66,8 +69,20 @@ export function TopicClusterMap({ projectId, clusterId, onCreateCluster }: Topic
   useEffect(() => {
     if (selectedCluster) {
       drawClusterMap();
+      
+      // Add resize event listener to redraw the map when window size changes
+      const handleResize = () => {
+        drawClusterMap();
+      };
+      
+      window.addEventListener('resize', handleResize);
+      
+      // Clean up event listener
+      return () => {
+        window.removeEventListener('resize', handleResize);
+      };
     }
-  }, [selectedCluster]);
+  }, [selectedCluster, hoveredSubtopic]);
 
   const loadClusters = async () => {
     if (!projectAccess.hasAccess) {
@@ -273,9 +288,285 @@ export function TopicClusterMap({ projectId, clusterId, onCreateCluster }: Topic
   };
 
   const drawClusterMap = () => {
-    // Canvas drawing logic for topic cluster visualization would go here
-    // For now we'll just console log
-    console.log('Drawing cluster map for:', selectedCluster?.main_topic);
+    if (!canvasRef.current || !selectedCluster) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Get computed colors from CSS variables using DOM
+    const computeColor = (variable: string, opacity = 1) => {
+      // Create a temporary element
+      const el = document.createElement('div');
+      // Set the background color using the CSS variable
+      el.style.color = `hsl(var(${variable}))`;
+      // Add to DOM temporarily to compute style
+      document.body.appendChild(el);
+      // Get computed color (will be in RGB format)
+      const computedColor = window.getComputedStyle(el).color;
+      // Remove element
+      document.body.removeChild(el);
+      
+      // Extract RGB values from computed color
+      const rgbMatch = computedColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)/);
+      if (rgbMatch) {
+        const r = parseInt(rgbMatch[1]);
+        const g = parseInt(rgbMatch[2]);
+        const b = parseInt(rgbMatch[3]);
+        const a = rgbMatch[4] ? parseFloat(rgbMatch[4]) : 1;
+        // Return RGBA with our opacity applied
+        return `rgba(${r}, ${g}, ${b}, ${opacity * a})`;
+      }
+      
+      // Fallback colors in case something goes wrong
+      const fallbacks: Record<string, string> = {
+        '--primary': 'rgba(0, 112, 243, ' + opacity + ')', // blue
+        '--background': 'rgba(255, 255, 255, ' + opacity + ')', // white
+        '--foreground': 'rgba(24, 24, 27, ' + opacity + ')', // dark gray
+        '--primary-foreground': 'rgba(255, 255, 255, ' + opacity + ')', // white
+        '--card': 'rgba(255, 255, 255, ' + opacity + ')', // white
+        '--border': 'rgba(230, 230, 230, ' + opacity + ')', // light gray
+        '--muted-foreground': 'rgba(115, 115, 115, ' + opacity + ')' // mid gray
+      };
+      
+      // Return fallback color or a default
+      return fallbacks[variable] || `rgba(0, 0, 0, ${opacity})`;
+    };
+
+    // Set canvas dimensions to match its display size
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+
+    // Clear canvas with background color
+    ctx.fillStyle = computeColor('--background');
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Constants for drawing
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const mainCircleRadius = Math.min(canvas.width, canvas.height) * 0.15;
+    const subCircleRadius = mainCircleRadius * 0.6;
+    const distanceFromCenter = Math.min(canvas.width, canvas.height) * 0.35;
+
+    // Draw main topic node with glow effect
+    ctx.save();
+    ctx.shadowColor = computeColor('--primary', 0.5);
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, mainCircleRadius, 0, Math.PI * 2);
+    ctx.fillStyle = computeColor('--primary');
+    ctx.fill();
+    ctx.restore();
+
+    // Main circle border
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, mainCircleRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = computeColor('--border');
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Draw main topic text
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillStyle = computeColor('--primary-foreground');
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Word wrap for main topic
+    const mainTopic = selectedCluster.main_topic || selectedCluster.main_keyword;
+    const words = mainTopic.split(' ');
+    let line = '';
+    let lines = [];
+    const maxWidth = mainCircleRadius * 1.5;
+    
+    for (let i = 0; i < words.length; i++) {
+      const testLine = line + words[i] + ' ';
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && i > 0) {
+        lines.push(line);
+        line = words[i] + ' ';
+      } else {
+        line = testLine;
+      }
+    }
+    lines.push(line);
+    
+    // Draw wrapped text
+    const lineHeight = 18;
+    let startY = centerY - ((lines.length - 1) * lineHeight) / 2;
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], centerX, startY);
+      startY += lineHeight;
+    }
+
+    // Calculate positions for subtopics around the circle
+    const subtopics = selectedCluster.subtopics || [];
+    const angleStep = (Math.PI * 2) / subtopics.length;
+
+    // Reset subtopic positions
+    subtopicPositionsRef.current = [];
+
+    // Draw subtopics
+    subtopics.forEach((subtopic, index) => {
+      const angle = index * angleStep;
+      const x = centerX + Math.cos(angle) * distanceFromCenter;
+      const y = centerY + Math.sin(angle) * distanceFromCenter;
+
+      // Store position for hover detection
+      subtopicPositionsRef.current.push({
+        index,
+        x,
+        y,
+        radius: subCircleRadius
+      });
+
+      // Draw connection line with gradient
+      const gradient = ctx.createLinearGradient(
+        centerX + Math.cos(angle) * mainCircleRadius,
+        centerY + Math.sin(angle) * mainCircleRadius,
+        x - Math.cos(angle) * subCircleRadius,
+        y - Math.sin(angle) * subCircleRadius
+      );
+      gradient.addColorStop(0, computeColor('--primary', 0.5));
+      gradient.addColorStop(1, computeColor('--muted-foreground', 0.3));
+
+      ctx.beginPath();
+      ctx.moveTo(
+        centerX + Math.cos(angle) * mainCircleRadius,
+        centerY + Math.sin(angle) * mainCircleRadius
+      );
+      ctx.lineTo(
+        x - Math.cos(angle) * subCircleRadius,
+        y - Math.sin(angle) * subCircleRadius
+      );
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Draw subtopic circle with hover effect
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, subCircleRadius, 0, Math.PI * 2);
+      
+      // Apply hover effect if this is the hovered subtopic
+      if (hoveredSubtopic === index) {
+        ctx.shadowColor = computeColor('--primary', 0.5);
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = computeColor('--primary');
+      } else {
+        ctx.fillStyle = computeColor('--card');
+      }
+      
+      ctx.fill();
+      ctx.restore();
+
+      // Subtopic circle border
+      ctx.beginPath();
+      ctx.arc(x, y, subCircleRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = hoveredSubtopic === index 
+        ? computeColor('--primary')
+        : computeColor('--border');
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Draw subtopic text
+      ctx.fillStyle = hoveredSubtopic === index 
+        ? computeColor('--primary-foreground')
+        : computeColor('--foreground');
+      ctx.font = hoveredSubtopic === index ? 'bold 12px sans-serif' : '12px sans-serif';
+      
+      // Word wrap for subtopics
+      const subtopicWords = subtopic.name.split(' ');
+      let subtopicLine = '';
+      let subtopicLines = [];
+      const maxSubWidth = subCircleRadius * 1.5;
+      
+      for (let i = 0; i < subtopicWords.length; i++) {
+        const testLine = subtopicLine + subtopicWords[i] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxSubWidth && i > 0) {
+          subtopicLines.push(subtopicLine);
+          subtopicLine = subtopicWords[i] + ' ';
+        } else {
+          subtopicLine = testLine;
+        }
+      }
+      subtopicLines.push(subtopicLine);
+      
+      // Draw wrapped subtopic text
+      const subLineHeight = 16;
+      let subStartY = y - ((subtopicLines.length - 1) * subLineHeight) / 2;
+      for (let i = 0; i < subtopicLines.length; i++) {
+        ctx.fillText(subtopicLines[i], x, subStartY);
+        subStartY += subLineHeight;
+      }
+    });
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || !selectedCluster) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Check if mouse is over any subtopic
+    let hovering = false;
+    subtopicPositionsRef.current.forEach(subtopic => {
+      const distance = Math.sqrt(
+        Math.pow(x - subtopic.x, 2) + Math.pow(y - subtopic.y, 2)
+      );
+      
+      if (distance <= subtopic.radius) {
+        setHoveredSubtopic(subtopic.index);
+        hovering = true;
+        canvasRef.current!.style.cursor = 'pointer';
+      }
+    });
+    
+    if (!hovering) {
+      setHoveredSubtopic(null);
+      canvasRef.current.style.cursor = 'default';
+    }
+  };
+
+  const handleCanvasMouseLeave = () => {
+    setHoveredSubtopic(null);
+    if (canvasRef.current) {
+      canvasRef.current.style.cursor = 'default';
+    }
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || !selectedCluster) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Check if any subtopic was clicked
+    let clicked = false;
+    subtopicPositionsRef.current.forEach(subtopic => {
+      const distance = Math.sqrt(
+        Math.pow(x - subtopic.x, 2) + Math.pow(y - subtopic.y, 2)
+      );
+      
+      if (distance <= subtopic.radius) {
+        // Show details for this subtopic
+        setSelectedSubtopic(subtopic.index);
+        clicked = true;
+      }
+    });
+    
+    // If clicked outside any subtopic, deselect
+    if (!clicked) {
+      setSelectedSubtopic(null);
+    }
+  };
+
+  const handleSelectCluster = (cluster: TopicCluster) => {
+    setSelectedCluster(cluster);
+    setSelectedSubtopic(null); // Reset selected subtopic when changing clusters
   };
 
   // Show loading state
@@ -380,7 +671,7 @@ export function TopicClusterMap({ projectId, clusterId, onCreateCluster }: Topic
                           ? 'bg-primary text-primary-foreground'
                           : 'hover:bg-muted'
                       }`}
-                      onClick={() => setSelectedCluster(cluster)}
+                      onClick={() => handleSelectCluster(cluster)}
                     >
                       {cluster.main_topic}
                     </button>
@@ -396,8 +687,52 @@ export function TopicClusterMap({ projectId, clusterId, onCreateCluster }: Topic
                   <canvas
                     ref={canvasRef}
                     className="w-full h-full"
+                    onMouseMove={handleCanvasMouseMove}
+                    onMouseLeave={handleCanvasMouseLeave}
+                    onClick={handleCanvasClick}
                   />
                 </div>
+                
+                {selectedSubtopic !== null && selectedCluster.subtopics && selectedCluster.subtopics[selectedSubtopic] && (
+                  <div className="mt-4 p-4 border rounded-md bg-muted/10">
+                    <div className="flex justify-between items-start">
+                      <h4 className="font-medium text-lg">
+                        {selectedCluster.subtopics[selectedSubtopic].name}
+                      </h4>
+                      <button 
+                        onClick={() => setSelectedSubtopic(null)}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="mt-2">
+                      <h5 className="font-medium text-sm">Keywords</h5>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {selectedCluster.subtopics[selectedSubtopic].keywords.map((keyword, i) => (
+                          <span 
+                            key={i} 
+                            className="px-2 py-1 bg-secondary text-secondary-foreground text-xs rounded-full"
+                          >
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <h5 className="font-medium text-sm">Content Ideas</h5>
+                      <ul className="mt-1 space-y-1 text-sm">
+                        {selectedCluster.subtopics[selectedSubtopic].content_ideas.map((idea, i) => (
+                          <li key={i} className="flex items-start">
+                            <span className="mr-2">•</span>
+                            <span>{idea}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                   {selectedCluster.subtopics.map((subtopic, i) => (
                     <div key={i} className="border rounded-md p-3">
