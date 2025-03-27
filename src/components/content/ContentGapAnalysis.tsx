@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, AlertCircle, Search, Plus, CheckCircle, XCircle, TrendingUp, TrendingDown, BarChart } from 'lucide-react';
+import { Loader2, AlertCircle, Search, Plus, CheckCircle, XCircle, TrendingUp, TrendingDown, BarChart, RefreshCw } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ContentPageService } from '@/lib/services/content-service';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/components/ui/use-toast';
-import { CompetitorAnalysisService, ContentGap, CompetitiveAdvantage, CompetitiveStrategy, CompetitorKeyword } from '@/lib/services/CompetitorAnalysisService';
+import { ContentGap, CompetitiveAdvantage, CompetitiveStrategy, CompetitorKeyword } from '@/lib/services/CompetitorAnalysisService';
 import { Progress } from '@/components/ui/progress';
 
 interface ContentGapAnalysisProps {
@@ -153,15 +153,27 @@ export function ContentGapAnalysis({ contentPageId, onBack }: ContentGapAnalysis
       // Load project ID
       const projectId = page.project_id;
       
-      // Load competitors
-      const competitorsData = await CompetitorAnalysisService.getCompetitors(projectId);
-      if (competitorsData && competitorsData.length > 0) {
-        setCompetitors(competitorsData.map(comp => ({
+      // Load competitors using the API
+      const response = await fetch(`/api/competitive-analysis?projectId=${projectId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to load competitors');
+      }
+      
+      if (result.competitors && result.competitors.length > 0) {
+        setCompetitors(result.competitors.map((comp: any) => ({
           id: comp.id || '',
           url: comp.url,
           title: comp.title,
           keyPoints: comp.strengths || [],
-          keywords: comp.keywords?.map(k => k.keyword) || [],
+          keywords: comp.keywords?.map((k: { keyword: string }) => k.keyword) || [],
           wordCount: comp.metrics?.wordCount || 0,
           readabilityScore: comp.metrics?.readabilityScore || 0,
           keywordDensity: comp.metrics?.keywordDensity || 0
@@ -182,14 +194,67 @@ export function ContentGapAnalysis({ contentPageId, onBack }: ContentGapAnalysis
   const runCompetitiveAnalysis = async (projectId: string, url: string) => {
     setIsAnalyzing(true);
     try {
-      const result = await CompetitorAnalysisService.runCompetitiveAnalysis(projectId, url);
+      console.log(`Running competitive analysis for project ${projectId}, url: ${url}`);
+      
+      // Use the API endpoint instead of direct service call
+      const response = await fetch('/api/competitive-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectId,
+          url,
+          action: 'analyze'
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('API error response:', result);
+        throw new Error(result.error || result.message || 'Failed to run analysis');
+      }
+      
+      const analysis = result.analysis;
+      
+      if (!analysis) {
+        console.error('No analysis data in response:', result);
+        throw new Error('No analysis data returned from API');
+      }
+      
+      console.log('Analysis completed successfully:', analysis);
       
       // Update state with results
-      setContentGaps(result.contentGaps);
-      setMissingKeywords(result.keywordGaps);
-      setAdvantages(result.advantages);
-      setDisadvantages(result.disadvantages);
-      setStrategies(result.strategies);
+      setContentGaps(analysis.contentGaps || []);
+      setMissingKeywords(analysis.keywordGaps || []);
+      setAdvantages(analysis.advantages || []);
+      setDisadvantages(analysis.disadvantages || []);
+      setStrategies(analysis.strategies || []);
+
+      // If competitors data is included in the analysis, update the competitors state
+      if (analysis.competitors && analysis.competitors.length > 0) {
+        console.log('Updating competitors with latest metrics:', analysis.competitors);
+        const updatedCompetitors = analysis.competitors.map((comp: any) => ({
+          id: comp.id || '',
+          url: comp.url,
+          title: comp.title || comp.name || comp.url,
+          keyPoints: comp.strengths || [],
+          keywords: Array.isArray(comp.keywords) 
+            ? (typeof comp.keywords[0] === 'string' 
+                ? comp.keywords 
+                : comp.keywords.map((k: any) => 
+                    typeof k === 'string' ? k : k.keyword || ''))
+            : [],
+          wordCount: comp.metrics?.wordCount || 0,
+          readabilityScore: comp.metrics?.readabilityScore || 0,
+          keywordDensity: comp.metrics?.keywordDensity || 0
+        }));
+        setCompetitors(updatedCompetitors);
+      }
+      
+      // Auto switch to the gaps tab after analysis
+      setActiveTab('gaps');
       
       // Show success message
       toast({
@@ -225,40 +290,64 @@ export function ContentGapAnalysis({ contentPageId, onBack }: ContentGapAnalysis
     setIsSearching(true);
     
     try {
-      // Add the competitor using the service
-      const projectId = contentPage.project_id;
-      const newCompetitor = await CompetitorAnalysisService.addCompetitor(projectId, searchUrl);
+      console.log(`Adding competitor URL: ${searchUrl}`);
       
-      if (newCompetitor) {
-        // Add to the UI list
-        setCompetitors([...competitors, {
-          id: newCompetitor.id || '',
-          url: newCompetitor.url,
-          title: newCompetitor.title,
-          keyPoints: [],
-          keywords: [],
-          wordCount: newCompetitor.contentLength || 0,
-          readabilityScore: 0,
-          keywordDensity: 0
-        }]);
-        
-        setSearchUrl('');
-        
-        toast({
-          title: "Competitor Added",
-          description: "The competitor content has been added for analysis.",
-        });
-        
-        // Re-run the analysis with the new competitor
-        await runCompetitiveAnalysis(projectId, contentPage.url);
-      } else {
-        throw new Error("Failed to add competitor");
+      // Use the API endpoint instead of direct service call
+      const projectId = contentPage.project_id;
+      const response = await fetch('/api/competitive-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectId,
+          url: searchUrl,
+          action: 'add'
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('API error response:', result);
+        throw new Error(result.error || result.message || 'Failed to add competitor');
       }
+      
+      const newCompetitor = result.competitor;
+      
+      if (!newCompetitor) {
+        console.error('No competitor data in response:', result);
+        throw new Error("API returned success but no competitor data");
+      }
+      
+      console.log('Received competitor data:', newCompetitor);
+      
+      // Add to the UI list - handle both name/title variations
+      setCompetitors([...competitors, {
+        id: newCompetitor.id || '',
+        url: newCompetitor.url,
+        title: newCompetitor.name || newCompetitor.title || searchUrl,
+        keyPoints: newCompetitor.strengths || [],
+        keywords: newCompetitor.keywords?.map((k: { keyword: string }) => k.keyword) || [],
+        wordCount: newCompetitor.metrics?.wordCount || 0,
+        readabilityScore: newCompetitor.metrics?.readabilityScore || 0,
+        keywordDensity: newCompetitor.metrics?.keywordDensity || 0
+      }]);
+      
+      setSearchUrl('');
+      
+      toast({
+        title: "Competitor Added",
+        description: "The competitor content has been added for analysis.",
+      });
+      
+      // Re-run the analysis with the new competitor
+      await runCompetitiveAnalysis(projectId, contentPage.url);
     } catch (error) {
       console.error('Error adding competitor:', error);
       toast({
         title: "Failed to Add Competitor",
-        description: "There was an error adding the competitor for analysis.",
+        description: error instanceof Error ? error.message : "There was an error adding the competitor for analysis.",
         variant: "destructive"
       });
     } finally {
@@ -322,11 +411,41 @@ export function ContentGapAnalysis({ contentPageId, onBack }: ContentGapAnalysis
           </p>
         </div>
         
-        {onBack && (
-          <Button variant="outline" onClick={onBack}>
-            Back
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (contentPage && contentPage.project_id) {
+                setIsAnalyzing(true);
+                runCompetitiveAnalysis(contentPage.project_id, contentPage.url)
+                  .catch(error => {
+                    console.error('Error refreshing analysis:', error);
+                    toast({
+                      title: "Refresh Failed",
+                      description: "Failed to refresh competitor analysis.",
+                      variant: "destructive"
+                    });
+                  });
+              }
+            }}
+            disabled={isAnalyzing || competitors.length === 0}
+            size="sm"
+            className="flex items-center"
+          >
+            {isAnalyzing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh Analysis
           </Button>
-        )}
+          
+          {onBack && (
+            <Button variant="outline" onClick={onBack}>
+              Back
+            </Button>
+          )}
+        </div>
       </div>
       
       <Card>

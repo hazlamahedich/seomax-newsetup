@@ -169,7 +169,10 @@ export function Providers({ children }: ProvidersProps) {
         try {
           // Create abort controller with timeout
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+          const timeoutId = setTimeout(() => {
+            console.warn(`[Providers] Auth request timeout triggered for ${urlString}`);
+            controller.abort();
+          }, FETCH_TIMEOUT);
           
           // If we're offline and have cached session, return it immediately
           if (!isOnline && sessionCache.data) {
@@ -183,16 +186,20 @@ export function Providers({ children }: ProvidersProps) {
           
           // Only add signal to existing options, don't create a new Request object
           // as that can break NextAuth parameter handling
-          if (args[1] && typeof args[1] === 'object') {
-            // Add timeout to existing options without losing any context
-            args[1] = {
-              ...args[1],
+          let fetchOptions = args[1] || {};
+          if (typeof fetchOptions === 'object') {
+            // Create a new options object with the signal
+            fetchOptions = {
+              ...fetchOptions,
               signal: controller.signal
             };
           } else {
             // Otherwise create RequestInit
-            args[1] = { signal: controller.signal };
+            fetchOptions = { signal: controller.signal };
           }
+          
+          // Replace the options in the args
+          args[1] = fetchOptions;
           
           // Make the request with timeout
           const response = await originalFetch(...args);
@@ -201,9 +208,11 @@ export function Providers({ children }: ProvidersProps) {
           // If response is successful and not empty, update our cache
           if (response.ok) {
             try {
+              // Clone the response before reading it
               const clonedResponse = response.clone();
               const text = await clonedResponse.text();
               
+              // Only try to parse if we have content
               if (text && text.trim() !== '') {
                 try {
                   const sessionData = JSON.parse(text);
@@ -242,7 +251,7 @@ export function Providers({ children }: ProvidersProps) {
               
               // Check if we have a valid cached session to use
               if (sessionCache.data && (Date.now() - sessionCache.timestamp < sessionCache.staleTime)) {
-                console.log('[Providers] Using cached session data');
+                console.log('[Providers] Using cached session data for empty response');
                 return new Response(JSON.stringify(sessionCache.data), {
                   status: 200,
                   headers: { 'Content-Type': 'application/json' }
@@ -287,7 +296,11 @@ export function Providers({ children }: ProvidersProps) {
         }
       } catch (error) {
         console.error('[Providers] Fetch interception error:', error);
-        throw error;
+        // Return a fallback session on unhandled errors
+        return new Response(JSON.stringify(fallbackSession), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
     };
     
