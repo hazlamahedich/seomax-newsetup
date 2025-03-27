@@ -1,15 +1,12 @@
 /**
- * Session Utilities (Fixed Version)
+ * Session Utilities
  * 
  * This file provides utilities for managing session persistence and restoration
  * across page navigations and browser refreshes. It works with both NextAuth
  * and Supabase authentication.
- * 
- * This version includes proper SSR checks for localStorage access.
  */
 
 import { ExtendedUser, StoredSession } from '@/lib/types/auth.types';
-import safeStorage from './safe-storage';
 
 const SESSION_STORAGE_KEY = 'seomax_session';
 
@@ -96,8 +93,7 @@ export function saveSessionToStorage(user: ExtendedUser | null, isAdmin: boolean
     isAdmin,
     expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
   };
-  
-  safeStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
 }
 
 // Cache for session information to avoid excessive localStorage reads
@@ -105,46 +101,37 @@ let cachedSession: StoredUser | null = null;
 
 /**
  * Get user session data from localStorage
- * Returns empty session if no valid session exists or if session has expired
+ * Returns null if no valid session exists or if session has expired
+ * Uses a cache to reduce localStorage reads
  */
 export function getSessionFromStorage(): StoredSession {
-  const defaultSession: StoredSession = {
-    user: null,
-    isAdmin: false,
-    expires: new Date(0).toISOString()
-  };
-  
-  const sessionStr = safeStorage.getItem(SESSION_STORAGE_KEY);
+  const sessionStr = localStorage.getItem(SESSION_STORAGE_KEY);
   if (!sessionStr) {
-    return defaultSession;
+    return {
+      user: null,
+      isAdmin: false,
+      expires: new Date(0).toISOString()
+    };
   }
-  
-  try {
-    return JSON.parse(sessionStr);
-  } catch (error) {
-    console.error('[SessionUtils] Error parsing session data:', error);
-    return defaultSession;
-  }
+  return JSON.parse(sessionStr);
 }
 
 /**
  * Check if the current user is an admin based on stored session
  */
 export const checkIsAdminFromStorage = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  
   try {
     // Quick check from the dedicated flag
-    const isAdmin = safeStorage.getItem(STORAGE_KEYS.IS_ADMIN) === 'true';
+    const isAdmin = localStorage.getItem(STORAGE_KEYS.IS_ADMIN) === 'true';
     
     // Additional validation from user email
-    const storedUser = safeStorage.getItem(STORAGE_KEYS.USER);
+    const storedUser = localStorage.getItem(STORAGE_KEYS.USER);
     if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser) as UserData;
-        if (user.email?.endsWith('@seomax.com')) {
-          return true;
-        }
-      } catch (error) {
-        console.error('[SessionUtils] Error parsing user data:', error);
+      const user = JSON.parse(storedUser) as UserData;
+      if (user.email?.endsWith('@seomax.com')) {
+        return true;
       }
     }
     
@@ -159,42 +146,39 @@ export const checkIsAdminFromStorage = (): boolean => {
  * Clear all session data from localStorage
  */
 export function clearSessionStorage(): void {
-  safeStorage.removeItem(SESSION_STORAGE_KEY);
+  localStorage.removeItem(SESSION_STORAGE_KEY);
 }
 
 /**
  * Update admin status in storage without changing other session data
  */
 export const updateAdminStatus = (isAdmin: boolean): void => {
-  safeStorage.setItem(STORAGE_KEYS.IS_ADMIN, isAdmin.toString());
-  console.log('[SessionUtils] Updated admin status in storage:', isAdmin);
+  if (typeof window === 'undefined') return;
+  
+  try {
+    localStorage.setItem(STORAGE_KEYS.IS_ADMIN, isAdmin.toString());
+    console.log('[SessionUtils] Updated admin status in storage:', isAdmin);
+  } catch (error) {
+    console.error('[SessionUtils] Error updating admin status:', error);
+  }
 };
 
 // Debug utility for logging session info
 export function debugSessionInfo(location: string) {
   try {
-    let sessionInfo = { hasUser: false, userId: 'not-available', isAdmin: false };
+    const session = getSessionFromStorage();
+    const hasUser = !!session?.user;
+    const userId = session?.user?.id || 'none';
+    const isAdmin = checkIsAdminFromStorage();
     
-    // Only try to access storage on client side
-    if (safeStorage.isBrowser()) {
-      const session = getSessionFromStorage();
-      const hasUser = !!session?.user;
-      const userId = session?.user?.id || 'none';
-      const isAdmin = checkIsAdminFromStorage();
-      
-      sessionInfo = { hasUser, userId, isAdmin };
-      
-      console.log(`[DEBUG:${location}] Session info:`, {
-        hasValidSession: hasUser,
-        userId,
-        isAdmin,
-        timestamp: new Date().toISOString()
-      });
-    } else {
-      console.log(`[DEBUG:${location}] Running on server-side, no session available`);
-    }
+    console.log(`[DEBUG:${location}] Session info:`, {
+      hasValidSession: hasUser,
+      userId,
+      isAdmin,
+      timestamp: new Date().toISOString()
+    });
     
-    return sessionInfo;
+    return { hasUser, userId, isAdmin };
   } catch (e) {
     console.error(`[DEBUG:${location}] Error checking session:`, e);
     return { hasUser: false, userId: 'error', isAdmin: false };

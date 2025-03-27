@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { createServerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { PlusCircle } from 'lucide-react';
 
@@ -11,7 +11,7 @@ export default async function TopicClustersPage({
 }: { 
   params: { id: string } 
 }) {
-  const supabase = createServerClient();
+  const supabase = createClient();
   
   // Check if user is logged in
   const { data: { session } } = await supabase.auth.getSession();

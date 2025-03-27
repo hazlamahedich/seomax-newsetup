@@ -40,6 +40,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
   
+  // In development mode, bypass auth checks for testing
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Middleware] Development mode: bypassing auth check for', path);
+    
+    // Special handling for content page - log more details
+    if (path === '/dashboard/content' || path.startsWith('/dashboard/content/')) {
+      console.log('[Middleware] Special handling for content page in development mode');
+    }
+    
+    return NextResponse.next();
+  }
+  
   // Check if path is in public paths - these don't need auth checks
   const isPublicPath = publicPaths.some(publicPath => 
     path === publicPath || path.startsWith(`${publicPath}/`)

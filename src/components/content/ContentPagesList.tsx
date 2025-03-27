@@ -1,84 +1,124 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { 
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+} from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, PlusCircle, Edit, BarChart2, Trash2, ExternalLink, Lightbulb, LineChart, PieChart } from 'lucide-react';
+import { 
+  Edit, BarChart2, Trash2, ExternalLink, Lightbulb, LineChart, PieChart, AlertCircle, Pencil, Layers, RefreshCw
+} from 'lucide-react';
+import { 
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 import { ContentPageService } from '@/lib/services/content-service';
 import { ContentPage } from '@/lib/types/database.types';
+import { toast } from '@/components/ui/use-toast';
 
 interface ContentPagesListProps {
   projectId: string;
+  contentPages?: ContentPage[];
   onCreatePage?: () => void;
   onEditPage?: (pageId: string) => void;
   onAnalyzePage?: (pageId: string) => void;
   onOptimizePage?: (pageId: string) => void;
   onViewPerformance?: (pageId: string) => void;
   onAnalyzeGap?: (pageId: string) => void;
+  onPageDeleted?: () => void;
 }
 
 export function ContentPagesList({
   projectId,
+  contentPages,
   onCreatePage,
   onEditPage,
   onAnalyzePage,
   onOptimizePage,
   onViewPerformance,
   onAnalyzeGap,
+  onPageDeleted
 }: ContentPagesListProps) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [pages, setPages] = useState<ContentPage[]>([]);
-  const [filteredPages, setFilteredPages] = useState<ContentPage[]>([]);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [localPages, setLocalPages] = useState<ContentPage[]>([]);
+  const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    if (projectId) {
-      loadPages();
-    }
-  }, [projectId]);
+  // Use provided content pages if available, otherwise use local state
+  const pages = contentPages || localPages;
 
-  useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredPages(pages);
-    } else {
-      const term = searchTerm.toLowerCase();
-      setFilteredPages(
-        pages.filter(
-          (page) =>
-            page.title?.toLowerCase().includes(term) ||
-            page.url?.toLowerCase().includes(term) ||
-            page.content?.toLowerCase().includes(term)
-        )
-      );
-    }
-  }, [searchTerm, pages]);
-
-  const loadPages = async () => {
+  const handleDeletePage = async (pageId: string) => {
     try {
-      setIsLoading(true);
-      const contentPages = await ContentPageService.getContentPages(projectId);
-      setPages(contentPages);
-      setFilteredPages(contentPages);
+      setIsDeleting(pageId);
+      await ContentPageService.deleteContentPage(pageId);
+      
+      // If we're using local pages, update them
+      if (!contentPages) {
+        setLocalPages((prevPages) => prevPages.filter((page) => page.id !== pageId));
+      }
+      
+      // Notify parent component about deletion
+      if (onPageDeleted) {
+        onPageDeleted();
+      }
+      toast({
+        title: "Page deleted",
+        description: "The content page has been successfully deleted.",
+      });
     } catch (error) {
-      console.error('Error loading content pages:', error);
+      console.error('Error deleting content page:', error);
+      toast({
+        title: "Error",
+        description: "There was an error deleting the content page.",
+        variant: "destructive"
+      });
     } finally {
-      setIsLoading(false);
+      setIsDeleting(null);
     }
   };
 
-  const handleDeletePage = async (pageId: string) => {
-    if (window.confirm('Are you sure you want to delete this content page?')) {
-      try {
-        await ContentPageService.deleteContentPage(pageId);
-        setPages((prevPages) => prevPages.filter((page) => page.id !== pageId));
-      } catch (error) {
-        console.error('Error deleting content page:', error);
+  const handleAnalyze = async (pageId: string) => {
+    try {
+      setAnalyzing(prev => ({ ...prev, [pageId]: true }));
+      
+      const response = await fetch('/api/content-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contentPageId: pageId,
+          action: 'analyze'
+        }),
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to start analysis');
       }
+      
+      toast({
+        title: "Analysis started",
+        description: "Content analysis is now in progress. This may take a minute.",
+      });
+      
+      // Call the parent component's analyze handler to update the UI
+      onAnalyzePage?.(pageId);
+    } catch (error) {
+      console.error('Error starting analysis:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to start analysis",
+        variant: "destructive"
+      });
+    } finally {
+      setAnalyzing(prev => {
+        const newState = { ...prev };
+        delete newState[pageId];
+        return newState;
+      });
     }
   };
 
@@ -98,7 +138,7 @@ export function ContentPagesList({
     if (score === null) return <Badge variant="outline">Not analyzed</Badge>;
 
     if (score >= 80) {
-      return <Badge className="bg-green-100 text-green-800">Easy to Read ({score})</Badge>;
+      return <Badge className="bg-green-100 text-green-800">Easy ({score})</Badge>;
     } else if (score >= 60) {
       return <Badge className="bg-yellow-100 text-yellow-800">Moderate ({score})</Badge>;
     } else {
@@ -115,151 +155,156 @@ export function ContentPagesList({
     });
   };
 
-  return (
-    <Card className="w-full">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Content Pages</CardTitle>
-        <Button onClick={onCreatePage}>
-          <PlusCircle className="h-4 w-4 mr-2" />
-          Add Content Page
-        </Button>
-      </CardHeader>
-      <CardContent>
-        <div className="mb-4 flex items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-            <Input
-              placeholder="Search content pages..."
-              className="pl-8"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <Button variant="outline" className="ml-2" onClick={loadPages}>
-            Refresh
+  if (pages.length === 0) {
+    return (
+      <div className="py-8 text-center border rounded-md">
+        <div className="flex flex-col items-center justify-center space-y-3">
+          <AlertCircle className="h-8 w-8 text-muted-foreground" />
+          <h3 className="text-lg font-medium">No content pages found</h3>
+          <p className="text-sm text-muted-foreground max-w-md">
+            You haven't created any content pages yet. Add your first page to start
+            tracking and optimizing your content.
+          </p>
+          <Button onClick={onCreatePage} className="mt-2">
+            Add Your First Content Page
           </Button>
         </div>
+      </div>
+    );
+  }
 
-        {isLoading ? (
-          <div className="py-8 text-center">Loading content pages...</div>
-        ) : filteredPages.length === 0 ? (
-          <div className="py-8 text-center">
-            {pages.length === 0
-              ? 'No content pages found. Click "Add Content Page" to create one.'
-              : 'No pages match your search criteria.'}
-          </div>
-        ) : (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title / URL</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>SEO Score</TableHead>
-                  <TableHead>Readability</TableHead>
-                  <TableHead>Words</TableHead>
-                  <TableHead>Last Updated</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPages.map((page) => (
-                  <TableRow key={page.id}>
-                    <TableCell className="font-medium">
-                      <div>{page.title || 'Untitled'}</div>
-                      <div className="text-sm text-gray-500 truncate max-w-xs">
-                        {page.url ? (
-                          <a
-                            href={page.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline flex items-center"
-                          >
-                            {page.url}
-                            <ExternalLink className="h-3 w-3 ml-1" />
-                          </a>
-                        ) : (
-                          'No URL'
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={page.status !== 'not-analyzed' ? 'default' : 'outline'}
-                        className={page.status !== 'not-analyzed' ? 'bg-blue-100 text-blue-800' : ''}
+  return (
+    <div className="rounded-md border overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Title / URL</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>SEO Score</TableHead>
+            <TableHead>Readability</TableHead>
+            <TableHead>Words</TableHead>
+            <TableHead>Last Updated</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {pages.map((page) => (
+            <TableRow key={page.id}>
+              <TableCell className="font-medium">
+                <div className="font-medium">{page.title || 'Untitled'}</div>
+                <div className="text-sm text-muted-foreground truncate max-w-xs">
+                  {page.url ? (
+                    <a
+                      href={page.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline flex items-center"
+                    >
+                      {page.url}
+                      <ExternalLink className="h-3 w-3 ml-1" />
+                    </a>
+                  ) : (
+                    'No URL'
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge
+                  variant={page.status !== 'not-analyzed' ? 'default' : 'outline'}
+                  className={page.status !== 'not-analyzed' ? 'bg-blue-100 text-blue-800' : ''}
+                >
+                  {page.status === 'analyzing' ? 'Analyzing...' : page.status !== 'not-analyzed' ? 'Analyzed' : 'Draft'}
+                </Badge>
+              </TableCell>
+              <TableCell>{getSeoScoreBadge(page.seo_score)}</TableCell>
+              <TableCell>{getReadabilityBadge(page.readability_score)}</TableCell>
+              <TableCell>{page.word_count?.toLocaleString() || 0}</TableCell>
+              <TableCell>{formatDate(page.updated_at || page.created_at)}</TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end space-x-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onEditPage?.(page.id)}
+                    title="Edit content"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleAnalyze(page.id)}
+                    disabled={analyzing[page.id] || page.status === 'analyzing'}
+                    title="Analyze content"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${analyzing[page.id] || page.status === 'analyzing' ? 'animate-spin' : ''}`} />
+                  </Button>
+                  {onOptimizePage && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onOptimizePage(page.id)}
+                      title="Optimize content"
+                    >
+                      <Lightbulb className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {onViewPerformance && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onViewPerformance(page.id)}
+                      title="View performance"
+                    >
+                      <LineChart className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {onAnalyzeGap && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onAnalyzeGap(page.id)}
+                      title="Gap analysis"
+                    >
+                      <PieChart className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Delete content"
+                        disabled={isDeleting === page.id}
                       >
-                        {page.status !== 'not-analyzed' ? 'Analyzed' : 'Draft'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{getSeoScoreBadge(page.seo_score)}</TableCell>
-                    <TableCell>{getReadabilityBadge(page.readability_score)}</TableCell>
-                    <TableCell>{page.word_count || 0}</TableCell>
-                    <TableCell>{formatDate(page.updated_at)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onEditPage?.(page.id)}
-                          title="Edit content"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onAnalyzePage?.(page.id)}
-                          title="Analyze content"
-                        >
-                          <BarChart2 className="h-4 w-4" />
-                        </Button>
-                        {onOptimizePage && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => onOptimizePage(page.id)}
-                            title="Optimize content"
-                          >
-                            <Lightbulb className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {onViewPerformance && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => onViewPerformance(page.id)}
-                            title="View performance"
-                          >
-                            <LineChart className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {onAnalyzeGap && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => onAnalyzeGap(page.id)}
-                            title="Gap analysis"
-                          >
-                            <PieChart className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete this content page?
+                          This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
                           onClick={() => handleDeletePage(page.id)}
-                          title="Delete content"
+                          className="bg-red-600 hover:bg-red-700"
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                          {isDeleting === page.id ? 'Deleting...' : 'Delete'}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 } 

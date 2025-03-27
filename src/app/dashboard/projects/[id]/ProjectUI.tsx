@@ -5,7 +5,7 @@ import { useRouter, usePathname, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, BarChart2, Keyboard, FileText, Settings, Code, Activity } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
-import { useExtendedAuth } from '@/components/providers/auth-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { debugSessionInfo } from '@/lib/auth/session-utils';
@@ -34,7 +34,7 @@ export default function ProjectUI({
   // Get ID from params (client component, so this is safe)
   const projectId = params?.id as string;
   
-  const { getActiveUser } = useExtendedAuth();
+  const { getActiveUser } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const fetchAttempted = useRef(false);

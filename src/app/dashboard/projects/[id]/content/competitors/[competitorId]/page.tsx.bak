@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { createClient } from '@/lib/supabase/server';
+import { createServerClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Trash2 } from 'lucide-react';
@@ -15,7 +15,7 @@ interface CompetitorDetailPageProps {
 }
 
 export default async function CompetitorDetailPage({ params }: CompetitorDetailPageProps) {
-  const supabase = createClient();
+  const supabase = createServerClient();
   
   // Check if user is logged in
   const { data: { session } } = await supabase.auth.getSession();
@@ -47,7 +47,7 @@ export default async function CompetitorDetailPage({ params }: CompetitorDetailP
   async function analyzeCompetitor() {
     'use server';
     
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     // Check if user is logged in
     const { data: { session } } = await supabase.auth.getSession();
@@ -63,7 +63,7 @@ export default async function CompetitorDetailPage({ params }: CompetitorDetailP
   async function deleteCompetitor() {
     'use server';
     
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     // Check if user is logged in
     const { data: { session } } = await supabase.auth.getSession();

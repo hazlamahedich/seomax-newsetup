@@ -66,9 +66,20 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async session({ session, token }) {
       try {
+        // Only log in development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[NextAuth] Session callback called with token:', token);
+        }
+        
         if (session.user && token.sub) {
           session.user.id = token.sub;
         }
+        
+        // Only log in development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[NextAuth] Returning session:', session);
+        }
+        
         return session;
       } catch (error) {
         console.error("Error in session callback:", error);
@@ -77,9 +88,20 @@ export const authOptions: NextAuthOptions = {
     },
     async jwt({ token, user }) {
       try {
+        // Only log in development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[NextAuth] JWT callback called with token:', token, 'user:', user);
+        }
+        
         if (user) {
           token.id = user.id;
         }
+        
+        // Only log in development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[NextAuth] Returning token:', token);
+        }
+        
         return token;
       } catch (error) {
         console.error("Error in JWT callback:", error);
@@ -99,24 +121,13 @@ export const authOptions: NextAuthOptions = {
   debug: process.env.NODE_ENV === 'development',
   // Enhanced error handling
   events: {
-    error: async ({ error }: { error: Error }) => {
-      console.error('NextAuth error:', error);
-    },
-    signIn: async (message: {
-      user: User;
-      account: any;
-      profile?: any;
-      isNewUser?: boolean
-    }) => {
+    signIn: async (message: { user: User; account: any; profile?: any; isNewUser?: boolean }) => {
       console.log('Successful sign in:', {
         userId: message.user.id,
         provider: message.account?.provider
       });
     },
-    signOut: async (message: {
-      token: any;
-      session: any
-    }) => {
+    signOut: async (message: { token: any; session: any }) => {
       console.log('User signed out:', {
         userId: message.token?.sub
       });

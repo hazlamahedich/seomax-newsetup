@@ -7,7 +7,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { useExtendedAuth } from '@/components/providers/auth-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { debugSessionInfo } from '@/lib/auth/session-utils';
 import ProjectUI from './ProjectUI';
@@ -25,7 +25,7 @@ export default function ClientProjectLayout({
   const params = useParams();
   // Use prop ID or fallback to params
   const projectId = propProjectId || (params?.id as string);
-  const { supabaseUser, getActiveUser } = useExtendedAuth();
+  const { supabaseUser, getActiveUser } = useAuth();
   const [isChecking, setIsChecking] = useState(true);
   const hasRunAuthCheck = useRef(false);
 

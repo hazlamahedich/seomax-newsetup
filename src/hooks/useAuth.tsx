@@ -1,6 +1,6 @@
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react';
 import { signIn as supabaseSignIn, signOut as supabaseSignOut, signUp as supabaseSignUp } from '../lib/auth/auth-service';
-import { useExtendedAuth } from '@/components/providers/auth-provider';
+import { useAuth as useProviderAuth } from '@/components/providers/auth-provider';
 import { useEffect, useState, useRef, useCallback } from 'react';
 
 // Define a generic user type that works with both auth systems
@@ -13,7 +13,7 @@ type GenericUser = {
 
 export function useAuth() {
   const { data: session, status } = useSession();
-  const { supabaseUser, loading: extLoading, refreshAuth } = useExtendedAuth();
+  const { supabaseUser, loading: extLoading, refreshAuth } = useProviderAuth();
   const loading = status === 'loading' || extLoading;
   
   // Store consistent user in local state to prevent flickering between auth systems

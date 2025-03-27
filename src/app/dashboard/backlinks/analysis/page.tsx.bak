@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BacklinkService } from "@/lib/services/backlink-service";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient } from "@/lib/supabase/server";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ function BacklinkChart({ type }: { type: string }) {
 
 // Server component for the detailed backlinks analysis page
 export default async function BacklinksAnalysisPage() {
-  const supabase = createClient();
+  const supabase = createServerClient();
   
   // Check if user is authenticated
   const { data: { session } } = await supabase.auth.getSession();

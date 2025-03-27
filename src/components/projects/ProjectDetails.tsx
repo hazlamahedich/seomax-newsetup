@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
-import { useExtendedAuth } from '@/components/providers/auth-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import { checkIsAdminFromStorage, getSessionFromStorage } from '@/lib/auth/session-utils';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
@@ -22,7 +22,7 @@ interface ProjectDetailsProps {
 }
 
 export default function ProjectDetails({ project: initialProject }: ProjectDetailsProps) {
-  const { supabaseUser: user, isAdmin } = useExtendedAuth();
+  const { supabaseUser, isAdmin: checkIsAdmin } = useAuth();
   const params = useParams();
   const router = useRouter();
   const projectId = params?.id as string;
@@ -42,8 +42,8 @@ export default function ProjectDetails({ project: initialProject }: ProjectDetai
     console.log('[ProjectDetails] Starting project fetch for ID:', projectId);
 
     // Check if we have a user before fetching
-    const activeUser = user || getSessionFromStorage().user;
-    const userIsAdmin = isAdmin?.() || checkIsAdminFromStorage();
+    const activeUser = supabaseUser || getSessionFromStorage().user;
+    const userIsAdmin = checkIsAdmin?.() || checkIsAdminFromStorage();
 
     if (!activeUser) {
       console.error('[ProjectDetails] No authenticated user found');
@@ -97,7 +97,7 @@ export default function ProjectDetails({ project: initialProject }: ProjectDetai
     };
     
     fetchProject();
-  }, [initialProject, projectId, router, user, isAdmin]);
+  }, [initialProject, projectId, router, supabaseUser, checkIsAdmin]);
 
   if (loading || !project) {
     return (

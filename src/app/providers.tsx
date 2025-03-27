@@ -318,19 +318,23 @@ export function Providers({ children }: ProvidersProps) {
     checkDatabaseConnectivity();
   }, []);
   
+  // Setup session provider props based on environment
+  const sessionProviderProps = {
+    refetchInterval: 60, // Refetch session every 60 seconds
+    refetchOnWindowFocus: true,
+    // Provide a fallback session in development to avoid redirects
+    ...(process.env.NODE_ENV === 'development' && sessionCache.data 
+      ? { session: sessionCache.data } 
+      : {})
+  };
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <SessionProvider 
-        refetchInterval={60} // Reduced frequency - refetch session every 60 seconds
-        refetchOnWindowFocus={true}
-        refetchWhenOffline={false}
-        // Add fallback session to prevent errors when session fetch fails
-        session={isClient && sessionCache.data ? sessionCache.data : fallbackSession}
-      >
+    <SessionProvider {...sessionProviderProps}>
+      <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          {children}
+          {isClient ? children : null}
         </AuthProvider>
-      </SessionProvider>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </SessionProvider>
   );
 } 

@@ -1,9 +1,9 @@
-import { createClient } from '../supabase/server';
+import { createServerClient } from '../supabase/server';
 
 export class BacklinkService {
   // Get all backlinks for a project
   static async getBacklinks(projectId: string) {
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     try {
       const { data, error } = await supabase
@@ -26,7 +26,7 @@ export class BacklinkService {
   
   // Get backlink details
   static async getBacklinkDetails(backlinkId: string) {
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     try {
       const { data, error } = await supabase
@@ -49,7 +49,7 @@ export class BacklinkService {
   
   // Add a new backlink
   static async addBacklink(projectId: string, sourceUrl: string, targetUrl: string, anchorText?: string, linkType: string = 'external') {
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     try {
       const { data, error } = await supabase
@@ -83,7 +83,7 @@ export class BacklinkService {
   
   // Update backlink status
   static async updateBacklinkStatus(backlinkId: string, status: string) {
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     try {
       const { data, error } = await supabase
@@ -110,7 +110,7 @@ export class BacklinkService {
   
   // Delete backlink
   static async deleteBacklink(backlinkId: string) {
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     try {
       const { error } = await supabase
@@ -132,7 +132,7 @@ export class BacklinkService {
   
   // Get or create backlink analysis
   static async getOrCreateBacklinkAnalysis(projectId: string) {
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     try {
       // First, attempt to get the latest analysis
@@ -208,7 +208,7 @@ export class BacklinkService {
   
   // Create backlink report
   static async createBacklinkReport(projectId: string, reportName: string, userId: string, schedule?: string) {
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     try {
       // Get the latest analysis to include in the report
@@ -291,7 +291,7 @@ export class BacklinkService {
   
   // Get all backlink reports for a project
   static async getBacklinkReports(projectId: string) {
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     try {
       const { data, error } = await supabase
@@ -314,7 +314,7 @@ export class BacklinkService {
   
   // Get competitor backlinks
   static async getCompetitorBacklinks(projectId: string, competitorUrl?: string) {
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     try {
       let query = supabase
@@ -342,7 +342,7 @@ export class BacklinkService {
   
   // Add competitor backlink
   static async addCompetitorBacklink(projectId: string, competitorUrl: string, sourceUrl: string, anchorText?: string) {
-    const supabase = createClient();
+    const supabase = createServerClient();
     
     try {
       const { data, error } = await supabase

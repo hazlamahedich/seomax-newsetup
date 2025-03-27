@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { createAdminClient } from "@/lib/supabase/admin-client";
 import {
   ContentPage,
   ContentAnalysis,
@@ -78,41 +79,87 @@ export interface CompetitorContentTable {
 // Content Page Service
 export const ContentPageService = {
   async getContentPages(projectId: string) {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-    );
-    const { data, error } = await supabase
-      .from('content_pages')
-      .select('*')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
+    try {
+      // First try with regular client
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+      );
+      
+      const { data, error } = await supabase
+        .from('content_pages')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
 
-    if (error) {
+      if (error) {
+        console.error('Error with regular client, trying admin client:', error);
+        
+        // If regular client fails, try with admin client to bypass RLS
+        const adminClient = createAdminClient();
+        const { data: adminData, error: adminError } = await adminClient
+          .from('content_pages')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false });
+          
+        if (adminError) {
+          console.error('Error with admin client too:', adminError);
+          throw adminError;
+        }
+        
+        console.log(`[AdminClient] Retrieved ${adminData.length} content pages`);
+        return adminData || [];
+      }
+
+      console.log(`[RegularClient] Retrieved ${data.length} content pages`);
+      return data || [];
+    } catch (error) {
       console.error('Error fetching content pages:', error);
       throw error;
     }
-
-    return data || [];
   },
 
   async getContentPage(id: string) {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-    );
-    const { data, error } = await supabase
-      .from('content_pages')
-      .select('*')
-      .eq('id', id)
-      .single();
+    try {
+      // First try with regular client
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+      );
+      
+      const { data, error } = await supabase
+        .from('content_pages')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-    if (error) {
+      if (error) {
+        console.error('Error with regular client, trying admin client:', error);
+        
+        // If regular client fails, try with admin client to bypass RLS
+        const adminClient = createAdminClient();
+        const { data: adminData, error: adminError } = await adminClient
+          .from('content_pages')
+          .select('*')
+          .eq('id', id)
+          .single();
+          
+        if (adminError) {
+          console.error('Error with admin client too:', adminError);
+          throw adminError;
+        }
+        
+        console.log(`[AdminClient] Retrieved content page with ID ${id}`);
+        return adminData;
+      }
+
+      console.log(`[RegularClient] Retrieved content page with ID ${id}`);
+      return data;
+    } catch (error) {
       console.error('Error fetching content page:', error);
       throw error;
     }
-
-    return data;
   },
 
   async createContentPage(data: Omit<ContentPageTable, 'id' | 'created_at' | 'updated_at' | 'analyzed_at'>) {

@@ -1,8 +1,10 @@
 import React from 'react';
-import { createServerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server-admin';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import ContentBreadcrumb from './components/ContentBreadcrumb';
 import ContentTabNavigation from './components/ContentTabNavigation';
+import { createClient as createRegularClient } from '@/lib/supabase/server';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,31 +12,46 @@ interface LayoutProps {
 }
 
 export default async function ContentLayout({ children, params }: LayoutProps) {
-  const supabase = createServerClient();
+  // First check authentication using regular client
+  const regularClient = createRegularClient();
+  const { data: { session } } = await regularClient.auth.getSession();
   
-  // Check if user is logged in
-  const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
-    redirect('/login');
+    // If not authenticated, redirect to login
+    return redirect('/login');
   }
+  
+  // Now get the project using admin client to bypass RLS
+  try {
+    const adminClient = createClient();
+    const { data: project } = await adminClient
+      .from('projects')
+      .select('*')
+      .eq('id', params.id)
+      .single();
 
-  // Get the project to ensure it belongs to the current user
-  const { data: project } = await supabase
-    .from('projects')
-    .select('*')
-    .eq('id', params.id)
-    .eq('user_id', session.user.id)
-    .single();
+    if (!project) {
+      // If project doesn't exist, redirect to dashboard
+      console.log('Project not found with ID:', params.id);
+      return redirect('/dashboard');
+    }
 
-  if (!project) {
-    redirect('/dashboard');
+    // Check if project belongs to current user
+    if (project.user_id !== session.user.id) {
+      console.log('User does not have access to this project:', params.id);
+      return redirect('/dashboard');
+    }
+
+    // Project exists and user has access - render the content
+    return (
+      <div className="space-y-6">
+        <ContentBreadcrumb projectId={params.id} projectName={project.name || project.website_name || 'Project'} />
+        <ContentTabNavigation projectId={params.id} />
+        {children}
+      </div>
+    );
+  } catch (error) {
+    console.error('Error in content layout:', error);
+    return redirect('/dashboard');
   }
-
-  return (
-    <div className="space-y-6">
-      <ContentBreadcrumb projectId={params.id} projectName={project.name} />
-      <ContentTabNavigation projectId={params.id} />
-      {children}
-    </div>
-  );
 } 

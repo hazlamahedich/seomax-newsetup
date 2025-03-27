@@ -116,7 +116,7 @@ export class ContentRewriterService {
       `;
 
       // Call the LLM
-      const model = liteLLMProvider.getLangChainModel();
+      const model = await liteLLMProvider.getLangChainModel();
       const response = await model.invoke(prompt);
       const rewrittenContent = response.content.toString().trim();
 
@@ -269,7 +269,7 @@ export class ContentRewriterService {
       `;
 
       // Call the LLM
-      const model = liteLLMProvider.getLangChainModel();
+      const model = await liteLLMProvider.getLangChainModel();
       const response = await model.invoke(prompt);
       
       // Parse the JSON response

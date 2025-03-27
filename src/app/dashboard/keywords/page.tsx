@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, TrendingUp, FileText, ListFilter } from 'lucide-react';
-import { useExtendedAuth } from '@/components/providers/auth-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 import keywordAnalyzer from '@/lib/ai/keyword-analyzer';
@@ -32,7 +32,7 @@ interface KeywordRanking {
 }
 
 export default function KeywordsPage() {
-  const { supabaseUser: user, getActiveUser, refreshAuth, synchronizeSupabaseSession } = useExtendedAuth();
+  const { supabaseUser: user, getActiveUser, refreshAuth, synchronizeSupabaseSession } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   

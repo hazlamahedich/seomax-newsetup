@@ -450,4 +450,7 @@ export class LiteLLMProvider {
 
     return { stream, callbacks };
   }
-} 
+}
+
+// Create and export a singleton instance for direct imports
+export const liteLLMProvider = LiteLLMProvider.getInstance(); 
